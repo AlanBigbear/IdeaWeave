@@ -1,0 +1,21 @@
+services:
+  backend:
+    build: ./backend
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./backend/data:/app/data
+    environment:
+      APP_NAME: B-Star
+      JWT_SECRET: change-me-in-local-demo-please-use-32bytes+
+      CORS_ORIGINS: http://localhost,http://127.0.0.1,http://localhost:80,http://127.0.0.1:80,http://localhost:8080,http://127.0.0.1:8080
+      DATA_DIR: /app/data
+      DEFAULT_LLM_BASE_URL: https://api.deepseek.com/v1
+      DEFAULT_LLM_MODEL: deepseek-chat
+
+  frontend:
+    build: ./frontend
+    ports:
+      - "8080:80"
+    depends_on:
+      - backend
