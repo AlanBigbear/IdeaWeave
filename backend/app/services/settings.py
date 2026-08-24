@@ -1,10 +1,11 @@
 from sqlalchemy.orm import Session
 
+from app.chains.llm import normalize_openai_base_url
 from app.core.config import settings
 from app.models import User, UserSettings
 from app.schemas import SettingsIn, SettingsOut
 from app.services.auth import touch_settings
-from app.services.secrets_store import get_api_key, set_api_key
+from app.services.secrets_store import get_api_key, get_effective_api_key
 
 
 def get_settings(db: Session, user: User) -> SettingsOut:
@@ -18,10 +19,15 @@ def get_settings(db: Session, user: User) -> SettingsOut:
         db.add(row)
         db.commit()
         db.refresh(row)
+    if not (row.llm_api_key or "").strip():
+        legacy = get_api_key(user.id)
+        if legacy:
+            row.llm_api_key = legacy
+            db.commit()
     return SettingsOut(
         llm_base_url=row.llm_base_url,
         llm_model=row.llm_model,
-        has_api_key=bool(get_api_key(user.id)),
+        has_api_key=bool(get_effective_api_key(user.id, row.llm_api_key)),
         default_llm_base_url=settings.default_llm_base_url,
         default_llm_model=settings.default_llm_model,
     )
@@ -32,10 +38,10 @@ def update_settings(db: Session, user: User, payload: SettingsIn) -> SettingsOut
     if row is None:
         row = UserSettings(user_id=user.id)
         db.add(row)
-    row.llm_base_url = payload.llm_base_url.strip() or settings.default_llm_base_url
+    row.llm_base_url = normalize_openai_base_url(payload.llm_base_url) or settings.default_llm_base_url
     row.llm_model = payload.llm_model.strip() or settings.default_llm_model
     touch_settings(row)
     if payload.llm_api_key is not None:
-        set_api_key(user.id, payload.llm_api_key)
+        row.llm_api_key = payload.llm_api_key.strip()
     db.commit()
     return get_settings(db, user)

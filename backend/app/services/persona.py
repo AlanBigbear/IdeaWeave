@@ -1,6 +1,10 @@
+from datetime import datetime, timezone
+
 from fastapi import HTTPException
 from sqlalchemy.orm import Session
 
+from app.chains.llm import build_llm
+from app.chains.pipelines import generate_persona_skill_chain, invoke_or_502
 from app.models import Persona, User
 from app.prompts.personas import PERSONA_OPTIONS, PERSONA_TEMPLATES, get_template
 from app.schemas import PersonaIn
@@ -8,6 +12,34 @@ from app.schemas import PersonaIn
 
 def list_user_personas(db: Session, user: User) -> list[Persona]:
     return db.query(Persona).filter(Persona.user_id == user.id).order_by(Persona.id.desc()).all()
+
+
+def get_owned_persona(db: Session, user: User, persona_id: int) -> Persona:
+    persona = db.get(Persona, persona_id)
+    if persona is None or persona.user_id != user.id:
+        raise HTTPException(status_code=404, detail="人设不存在")
+    return persona
+
+
+def generate_skill(db: Session, user: User, persona_id: int) -> Persona:
+    persona = get_owned_persona(db, user, persona_id)
+    llm = build_llm(db, user, temperature=0.7)
+    chain = generate_persona_skill_chain(llm, persona)
+    skill = invoke_or_502(chain, {})
+    persona.skill_prompt = skill.system_prompt.strip()
+    persona.skill_brief_json = skill.model_dump_json()
+    persona.skill_generated_at = datetime.now(timezone.utc)
+    db.commit()
+    db.refresh(persona)
+    return persona
+
+
+def update_skill(db: Session, user: User, persona_id: int, skill_prompt: str) -> Persona:
+    persona = get_owned_persona(db, user, persona_id)
+    persona.skill_prompt = skill_prompt.strip()
+    db.commit()
+    db.refresh(persona)
+    return persona
 
 
 def _persona_fields(payload: PersonaIn) -> dict:

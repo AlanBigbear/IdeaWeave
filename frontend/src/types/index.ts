@@ -5,6 +5,17 @@ export interface User {
   created_at: string;
 }
 
+export interface PersonaSkillBrief {
+  positioning: string;
+  hook_formula: string[];
+  tone_rules: string[];
+  topic_preferences: string[];
+  script_structure: string;
+  interaction_style: string;
+  red_lines: string[];
+  system_prompt: string;
+}
+
 export interface Persona {
   id: number;
   template_key: string;
@@ -18,6 +29,9 @@ export interface Persona {
   content_style: string;
   update_freq: string;
   comment_style: string;
+  skill_prompt: string;
+  skill_brief: PersonaSkillBrief | null;
+  skill_generated_at: string | null;
   created_at: string;
 }
 
@@ -55,6 +69,14 @@ export interface Settings {
   has_api_key: boolean;
   default_llm_base_url: string;
   default_llm_model: string;
+}
+
+export interface FetchPreview {
+  url: string;
+  title: string;
+  site_name: string;
+  text: string;
+  truncated: boolean;
 }
 
 export interface Topic {
@@ -138,6 +160,7 @@ export interface CalendarEvent {
   vlog_fit: string;
   commercial: string;
   raw_text: string;
+  source: "capture" | "extract" | "manual" | string;
   created_at: string;
 }
 

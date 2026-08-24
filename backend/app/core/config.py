@@ -15,7 +15,11 @@ class Settings(BaseSettings):
     cors_origins: str = "http://localhost:5173,http://127.0.0.1:5173"
     data_dir: Path = Path("./data")
     default_llm_base_url: str = "https://api.deepseek.com/v1"
-    default_llm_model: str = "deepseek-chat"
+    default_llm_model: str = "deepseek-v4-flash"
+    default_llm_api_key: str = ""
+    database_url: str = ""
+    mysql_connect_timeout: int = 5
+    mysql_fallback_sqlite: bool = True
 
     def model_post_init(self, __context) -> None:
         if not self.data_dir.is_absolute():
@@ -28,6 +32,12 @@ class Settings(BaseSettings):
     @property
     def db_path(self) -> Path:
         return self.data_dir / "bstar.db"
+
+    @property
+    def sqlalchemy_url(self) -> str:
+        if self.database_url.strip():
+            return self.database_url.strip()
+        return f"sqlite:///{self.db_path}"
 
     @property
     def secrets_path(self) -> Path:

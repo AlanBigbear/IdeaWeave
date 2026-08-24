@@ -15,10 +15,15 @@ router = APIRouter(prefix="/topics", tags=["topics"])
 def list_topics(
     feasibility: str | None = Query(default=None),
     q: str | None = Query(default=None),
+    status: str | None = Query(default=None),
+    priority: str | None = Query(default=None),
+    tag: str | None = Query(default=None),
     user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    return topic_service.list_topics(db, user, feasibility=feasibility, q=q)
+    return topic_service.list_topics(
+        db, user, feasibility=feasibility, q=q, status=status, priority=priority, tag=tag
+    )
 
 
 @router.post("", response_model=TopicOut)
@@ -53,8 +58,13 @@ def delete_topic(
 @router.get("/export.md")
 def export_md(
     feasibility: str | None = Query(default=None),
+    status: str | None = Query(default=None),
+    priority: str | None = Query(default=None),
+    tag: str | None = Query(default=None),
     user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    content = topic_service.export_markdown(db, user, feasibility=feasibility)
+    content = topic_service.export_markdown(
+        db, user, feasibility=feasibility, status=status, priority=priority, tag=tag
+    )
     return PlainTextResponse(content, media_type="text/markdown; charset=utf-8")

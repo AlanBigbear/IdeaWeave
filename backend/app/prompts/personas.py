@@ -89,20 +89,42 @@ def get_template(key: str) -> dict | None:
     return next((item for item in PERSONA_TEMPLATES if item["key"] == key), None)
 
 
+def _persona_fact_lines(persona) -> list[str]:
+    return [
+        f"UP 主名称：{persona.name}",
+        f"所在分区：{getattr(persona, 'zone', '') or '未指定'}",
+        f"内容风格：{getattr(persona, 'content_style', '') or persona.style_desc}",
+        f"更新节奏：{getattr(persona, 'update_freq', '') or '未指定'}",
+        f"评论互动：{getattr(persona, 'comment_style', '') or '未指定'}",
+        f"风格说明：{persona.style_desc}",
+        f"受众：{persona.audience}",
+        f"视频形态：{persona.video_format}",
+        f"禁忌：{persona.taboos}",
+        f"口吻样例：{persona.sample_tone}",
+    ]
+
+
+def persona_skill_fact_sheet(persona) -> str:
+    return "\n".join(_persona_fact_lines(persona))
+
+
 def persona_system_prompt(persona) -> str:
-    return (
+    base = (
         "你是面向小团队 B 站 UP 主的虚拟编导助手。"
-        "输出必须可执行，避免空泛鸡汤。默认中文。\n"
-        f"UP 主名称：{persona.name}\n"
-        f"所在分区：{getattr(persona, 'zone', '') or '未指定'}\n"
-        f"内容风格：{getattr(persona, 'content_style', '') or persona.style_desc}\n"
-        f"更新节奏：{getattr(persona, 'update_freq', '') or '未指定'}\n"
-        f"评论互动：{getattr(persona, 'comment_style', '') or '未指定'}\n"
-        f"风格说明：{persona.style_desc}\n"
-        f"受众：{persona.audience}\n"
-        f"视频形态：{persona.video_format}\n"
-        f"禁忌：{persona.taboos}\n"
-        f"口吻样例：{persona.sample_tone}\n"
-        "请始终按该人设的分区调性、更新节奏和评论互动习惯来生成。"
+        "输出必须可执行，避免空泛鸡汤。默认中文。"
+    )
+    skill = (getattr(persona, "skill_prompt", "") or "").strip()
+    if skill:
+        return (
+            f"{base}\n\n"
+            f"【该 UP 主的专属编导 Skill】\n{skill}\n\n"
+            f"【人设硬约束（与 Skill 冲突时以此为准，禁忌绝不可违反）】\n"
+            + "\n".join(_persona_fact_lines(persona))
+            + "\n请严格按照专属 Skill 的定位、钩子公式、语言规则、脚本结构和红线来执行任务。"
+        )
+    return (
+        f"{base}\n"
+        + "\n".join(_persona_fact_lines(persona))
+        + "\n请始终按该人设的分区调性、更新节奏和评论互动习惯来生成。"
         "选题要贴合分区；脚本里预埋符合其评论风格的互动。"
     )

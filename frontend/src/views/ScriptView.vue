@@ -62,11 +62,13 @@
 </template>
 
 <script setup lang="ts">
-import { onMounted, ref } from "vue";
+import { onActivated, onMounted, ref } from "vue";
 import { useRoute } from "vue-router";
 import { ElMessage } from "element-plus";
 import { expandScriptStream } from "../api";
 import { SAMPLE_OUTLINE, SAMPLE_SHOTLIST, type ScriptRecord } from "../types";
+
+defineOptions({ name: "ScriptView" });
 
 const route = useRoute();
 const outline = ref("");
@@ -77,11 +79,14 @@ const record = ref<ScriptRecord | null>(null);
 const ideaSessionId = ref<number | null>(null);
 const topicId = ref<number | null>(null);
 
-onMounted(() => {
+function applyQuery() {
   if (route.query.outline) outline.value = String(route.query.outline);
   if (route.query.ideaSessionId) ideaSessionId.value = Number(route.query.ideaSessionId);
   if (route.query.topicId) topicId.value = Number(route.query.topicId);
-});
+}
+
+onMounted(applyQuery);
+onActivated(applyQuery);
 
 function fillSample() {
   outline.value = SAMPLE_OUTLINE;

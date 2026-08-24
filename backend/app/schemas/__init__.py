@@ -1,6 +1,7 @@
+import json
 from datetime import datetime
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 
 class TokenOut(BaseModel):
@@ -54,9 +55,26 @@ class PersonaOut(BaseModel):
     content_style: str = ""
     update_freq: str = ""
     comment_style: str = ""
+    skill_prompt: str = ""
+    skill_brief: dict | None = Field(default=None, validation_alias="skill_brief_json")
+    skill_generated_at: datetime | None = None
     created_at: datetime
 
-    model_config = {"from_attributes": True}
+    model_config = {"from_attributes": True, "populate_by_name": True}
+
+    @field_validator("skill_brief", mode="before")
+    @classmethod
+    def _parse_skill_brief(cls, value):
+        if isinstance(value, str):
+            try:
+                return json.loads(value) or None
+            except (ValueError, TypeError):
+                return None
+        return value or None
+
+
+class PersonaSkillUpdateIn(BaseModel):
+    skill_prompt: str = Field(min_length=20)
 
 
 class PersonaTemplateOut(BaseModel):
@@ -107,8 +125,27 @@ class SettingsIn(BaseModel):
 
 
 class ExtractInspirationIn(BaseModel):
-    raw_text: str = Field(min_length=8)
+    raw_text: str = ""
     source_note: str = ""
+    url: str = ""
+
+    @model_validator(mode="after")
+    def _require_content(self):
+        if not self.url.strip() and len(self.raw_text.strip()) < 8:
+            raise ValueError("请粘贴更完整的摘要，或提供要抓取的链接")
+        return self
+
+
+class FetchPreviewIn(BaseModel):
+    url: str = Field(min_length=8)
+
+
+class FetchPreviewOut(BaseModel):
+    url: str
+    title: str
+    site_name: str
+    text: str
+    truncated: bool
 
 
 class InspirationOut(BaseModel):
@@ -118,6 +155,10 @@ class InspirationOut(BaseModel):
     created_at: datetime
 
     model_config = {"from_attributes": True}
+
+
+TOPIC_STATUSES = {"inbox", "ready", "paused", "dropped"}
+TOPIC_PRIORITIES = {"high", "mid", "low"}
 
 
 class TopicOut(BaseModel):
@@ -130,6 +171,8 @@ class TopicOut(BaseModel):
     why: str
     source: str
     status: str
+    priority: str
+    tags: list[str]
     created_at: datetime
 
 
@@ -139,6 +182,9 @@ class TopicCreateIn(BaseModel):
     feasibility: str = "quick"
     cost_note: str = ""
     why: str = ""
+    status: str = "inbox"
+    priority: str = "mid"
+    tags: list[str] = Field(default_factory=list, max_length=10)
 
 
 class TopicPatchIn(BaseModel):
@@ -148,6 +194,8 @@ class TopicPatchIn(BaseModel):
     cost_note: str | None = None
     why: str | None = None
     status: str | None = None
+    priority: str | None = None
+    tags: list[str] | None = Field(default=None, max_length=10)
 
 
 class IdeaItem(BaseModel):
@@ -231,6 +279,27 @@ class CalendarExtractIn(BaseModel):
     raw_text: str = Field(min_length=8)
 
 
+class CalendarEventIn(BaseModel):
+    title: str = Field(min_length=1, max_length=200)
+    start_date: str = ""
+    end_date: str = ""
+    location: str = ""
+    vlog_fit: str = ""
+    commercial: str = ""
+    raw_text: str = ""
+    source: str = "manual"
+
+
+class CalendarEventUpdate(BaseModel):
+    title: str | None = None
+    start_date: str | None = None
+    end_date: str | None = None
+    location: str | None = None
+    vlog_fit: str | None = None
+    commercial: str | None = None
+    raw_text: str | None = None
+
+
 class CalendarEventOut(BaseModel):
     id: int
     title: str
@@ -240,9 +309,17 @@ class CalendarEventOut(BaseModel):
     vlog_fit: str
     commercial: str
     raw_text: str
+    source: str = "extract"
     created_at: datetime
 
     model_config = {"from_attributes": True}
+
+
+class CalendarCaptureOut(BaseModel):
+    created: int
+    skipped: int
+    warning: str = ""
+    events: list[CalendarEventOut]
 
 
 class CommentBundleOut(BaseModel):
