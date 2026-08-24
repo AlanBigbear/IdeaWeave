@@ -66,7 +66,7 @@ class Inspiration(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), index=True)
     raw_text: Mapped[str] = mapped_column(Text)
-    source_note: Mapped[str] = mapped_column(String(255), default="")
+    source_note: Mapped[str] = mapped_column(Text, default="")
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
 
 

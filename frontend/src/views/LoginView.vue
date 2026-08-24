@@ -6,9 +6,9 @@
         <span class="logo">B</span>
         <span>B-Star 编导台</span>
       </div>
-      <h1>把脑子里的灵感<br />变成能拍的脚本</h1>
+      <h1>灵感别烂在收藏夹里<br />拉出来变成能拍的脚本</h1>
       <p class="lead">
-        面向小团队 UP 主的前期创作工作台。粘贴爆款、选好人设，AI 当你的虚拟编导。
+        小团队 UP 主的前期创作基地～把爆款丢进来、选好人设，AI 编导娘陪你从选题卷到脚本。
       </p>
       <div class="hero-art">
         <img class="hero-img" :src="hero" alt="编导娘" />
@@ -19,8 +19,8 @@
     <section class="panel">
       <div class="panel-card">
         <img class="mini-mascot" :src="mascot" alt="" />
-        <h2>{{ mode === "login" ? "欢迎回来" : "创建创作者账号" }}</h2>
-        <p class="sub">先登录，再花 30 秒选分区和风格 ★</p>
+        <h2>{{ mode === "login" ? "欢迎回来～" : "成为新 UP 主" }}</h2>
+        <p class="sub">登录后花 30 秒捏一个人设 ★</p>
         <div class="switch seg-tabs">
           <button class="seg-tab" :class="{ on: mode === 'login' }" @click="mode = 'login'">登录</button>
           <button class="seg-tab" :class="{ on: mode === 'register' }" @click="mode = 'register'">注册</button>
@@ -33,10 +33,10 @@
             <el-input v-model="password" type="password" placeholder="密码（至少 6 位）" size="large" show-password />
           </el-form-item>
           <el-button class="go" type="primary" size="large" :loading="loading" @click="submit">
-            {{ mode === "login" ? "进入工作台" : "开始完善人设" }}
+            {{ mode === "login" ? "开工！" : "去捏人设！" }}
           </el-button>
         </el-form>
-        <p class="hint">本地账号 · 数据存在你电脑里</p>
+        <p class="hint">今天也要更新哦 · 先把这一期想清楚再拍</p>
       </div>
     </section>
   </div>
@@ -71,7 +71,7 @@ async function submit() {
     const api = mode.value === "login" ? authApi.login : authApi.register;
     const { data } = await api(username.value, password.value);
     await auth.setToken(data.access_token);
-    ElMessage.success(mode.value === "login" ? "欢迎回来" : "账号已创建");
+    ElMessage.success(mode.value === "login" ? "欢迎回来，今天也要爆更哦" : "账号捏好了！");
     await router.push(auth.hasPersona ? "/inspiration" : "/persona");
   } finally {
     loading.value = false;
@@ -232,6 +232,22 @@ h1 {
   }
   .hero-art {
     display: none;
+  }
+}
+
+@media (max-width: 480px) {
+  h1 {
+    font-size: 28px;
+  }
+  .hero {
+    padding: 24px 16px 4px;
+  }
+  .panel {
+    padding: 16px;
+  }
+  .panel-card {
+    padding: 24px 18px 22px;
+    border-radius: 22px;
   }
 }
 </style>

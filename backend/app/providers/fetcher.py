@@ -1,7 +1,8 @@
 import ipaddress
 import socket
+import time
 from dataclasses import dataclass
-from urllib.parse import urljoin, urlsplit
+from urllib.parse import parse_qsl, urlencode, urljoin, urlsplit, urlunsplit
 
 import httpx
 from bs4 import BeautifulSoup
@@ -9,7 +10,36 @@ from bs4 import BeautifulSoup
 MAX_HTML_BYTES = 2_000_000
 MAX_TEXT_CHARS = 6000
 MAX_REDIRECTS = 3
-TIMEOUT = 15.0
+TIMEOUT = 10.0
+TOTAL_DEADLINE = 25.0
+
+# 常见跟踪参数（含 B 站/CN 生态常用的一串）
+_TRACKING_PARAMS = {
+    "trackid", "track_id", "spm_id_from", "spm", "from_spmid", "from",
+    "vd_source", "share_source", "share_medium", "share_plat", "share_tag",
+    "share_session_id", "bbid", "ts", "t", "timestamp", "utm_source",
+    "utm_medium", "utm_campaign", "utm_term", "utm_content", "utm_id",
+    "referrer", "referer", "pf", "seid", "request_id", "creative_id",
+    "linked_creative_id", "caid", "resource_id", "source_id", "pvid",
+    "session_id", "sid", "trace", "click_id", "cvid",
+}
+
+
+def clean_url(url: str) -> str:
+    """去掉跟踪参数，保留核心链接（BV 号、专栏 ID 等路径信息不丢）。"""
+    url = (url or "").strip()
+    try:
+        parts = urlsplit(url)
+    except ValueError:
+        return url
+    if parts.scheme not in {"http", "https"} or not parts.hostname:
+        return url
+    query = [
+        (key, value)
+        for key, value in parse_qsl(parts.query, keep_blank_values=True)
+        if key.lower() not in _TRACKING_PARAMS and not value.startswith("__")
+    ]
+    return urlunsplit((parts.scheme, parts.netloc, parts.path, urlencode(query), ""))
 
 USER_AGENT = (
     "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 "
@@ -83,6 +113,8 @@ def _extract_text(soup: BeautifulSoup) -> tuple[str, str]:
 def fetch_webpage(url: str) -> FetchResult:
     url = url.strip()
     current = url
+    deadline = time.monotonic() + TOTAL_DEADLINE
+    body = b""
     with httpx.Client(
         follow_redirects=False,
         timeout=TIMEOUT,
@@ -91,6 +123,9 @@ def fetch_webpage(url: str) -> FetchResult:
         response = None
         for _ in range(MAX_REDIRECTS + 1):
             _assert_safe_url(current)
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                raise FetchError("抓取超时，页面响应太慢，试试粘贴文本模式")
             try:
                 response = client.get(current)
             except httpx.HTTPError as exc:
@@ -105,8 +140,17 @@ def fetch_webpage(url: str) -> FetchResult:
         if response is None or response.status_code >= 400:
             status = getattr(response, "status_code", "无响应")
             raise FetchError(f"目标页面返回 {status}，无法抓取（需要登录或已被删除的页面抓不到）")
+        try:
+            # 流式限量读取，避免超大页面被完整下载
+            with client.stream("GET", current) as stream:
+                for chunk in stream.iter_bytes(chunk_size=65536):
+                    body += chunk
+                    if len(body) >= MAX_HTML_BYTES:
+                        break
+        except httpx.HTTPError as exc:
+            raise FetchError(f"访问失败：{exc.__class__.__name__}") from exc
 
-    html = response.content[:MAX_HTML_BYTES].decode(response.encoding or "utf-8", errors="ignore")
+    html = body[:MAX_HTML_BYTES].decode(response.encoding or "utf-8", errors="ignore")
     soup = BeautifulSoup(html, "html.parser")
     title, text = _extract_text(soup)
     site_name = _meta_content(soup, "og:site_name", attr="property") or urlsplit(current).netloc
@@ -114,7 +158,7 @@ def fetch_webpage(url: str) -> FetchResult:
         raise FetchError("页面没有可分析的正文（可能是纯 JS 渲染页面，试试粘贴文本模式）")
     truncated = len(text) > MAX_TEXT_CHARS
     return FetchResult(
-        url=current,
+        url=clean_url(current),
         title=title or site_name,
         site_name=site_name,
         text=text[:MAX_TEXT_CHARS],

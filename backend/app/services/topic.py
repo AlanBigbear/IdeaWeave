@@ -1,3 +1,5 @@
+import re
+
 from fastapi import HTTPException
 from sqlalchemy import case
 from sqlalchemy.orm import Session
@@ -5,7 +7,7 @@ from sqlalchemy.orm import Session
 from app.chains.llm import build_llm
 from app.chains.pipelines import extract_topic_chain, invoke_or_502
 from app.models import Inspiration, Topic, User
-from app.providers.fetcher import FetchError, FetchResult, fetch_webpage
+from app.providers.fetcher import FetchError, FetchResult, clean_url, fetch_webpage
 from app.schemas import (
     TOPIC_PRIORITIES,
     TOPIC_STATUSES,
@@ -53,18 +55,45 @@ def topic_to_out(topic: Topic) -> TopicOut:
     )
 
 
+def _clip(text: str, limit: int) -> str:
+    text = text or ""
+    if len(text) <= limit:
+        return text
+    head, tail = int(limit * 0.8), int(limit * 0.2)
+    return f"{text[:head]}\n…（中段截断）…\n{text[-tail:]}"
+
+
+_URL_RE = re.compile(r"https?://[^\s，。；）)】\]]+")
+
+
+def _clean_note(note: str) -> str:
+    """备注里出现的所有链接都洗掉跟踪参数，只留主信息。"""
+    return _URL_RE.sub(lambda m: clean_url(m.group(0)), note or "")
+
+
 def extract_and_save(db: Session, user: User, payload: ExtractInspirationIn) -> TopicOut:
     persona = require_persona(db, user)
     if payload.url.strip() and not payload.raw_text.strip():
         fetched = _fetch_or_400(payload.url)
         raw_text = f"《{fetched.title}》（来源：{fetched.site_name}）\n{fetched.text}"
         source_note = payload.source_note.strip() or f"链接抓取：{fetched.url}"
+        truncated_note = "（正文较长已截断，仅基于前半部分提炼）\n" if fetched.truncated else ""
     else:
         raw_text = payload.raw_text
         source_note = payload.source_note
-    llm = build_llm(db, user)
+        truncated_note = ""
+    # 用户备注里若带链接也顺手洗掉跟踪参数
+    source_note = _clean_note(source_note).strip()[:500]
+    llm = build_llm(db, user, temperature=0.1, max_tokens=800)
     chain = extract_topic_chain(llm, persona)
-    result = invoke_or_502(chain, {"raw_text": raw_text, "source_note": source_note})
+    result = invoke_or_502(
+        chain,
+        {
+            "raw_text": _clip(raw_text, 8000),
+            "source_note": _clip(source_note, 200),
+            "truncated_note": truncated_note,
+        },
+    )
     feasibility = result.feasibility if result.feasibility in {"quick", "deferred"} else "quick"
     inspiration = Inspiration(
         user_id=user.id, raw_text=raw_text, source_note=source_note

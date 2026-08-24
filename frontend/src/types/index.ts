@@ -59,8 +59,18 @@ export interface OptionItem {
 export interface PersonaOptions {
   zones: OptionItem[];
   content_styles: string[];
+  zone_content_styles?: Record<string, string[]>;
+  common_content_styles?: string[];
   update_freqs: OptionItem[];
   comment_styles: OptionItem[];
+}
+
+export interface SkillTemplate {
+  key: string;
+  zone_key: string;
+  zone_label: string;
+  name: string;
+  desc: string;
 }
 
 export interface Settings {
@@ -89,6 +99,8 @@ export interface Topic {
   why: string;
   source: string;
   status: string;
+  priority: string;
+  tags: string[];
   created_at: string;
 }
 

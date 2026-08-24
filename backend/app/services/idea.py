@@ -29,10 +29,10 @@ def diverge(db: Session, user: User, payload: DivergeIn) -> IdeaSessionOut:
         if topic is None or topic.user_id != user.id:
             raise HTTPException(status_code=404, detail="选题不存在")
         topic_hint = f"{topic.title} | {topic.why}"
-    llm = build_llm(db, user, temperature=0.8)
+    llm = build_llm(db, user, temperature=0.8, max_tokens=1600)
     bundle = invoke_or_502(
         diverge_ideas_chain(llm, persona),
-        {"vague_idea": payload.vague_idea, "topic_hint": topic_hint},
+        {"vague_idea": payload.vague_idea[:2000], "topic_hint": topic_hint[:600]},
     )
     row = IdeaSession(
         user_id=user.id,

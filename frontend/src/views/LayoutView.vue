@@ -5,7 +5,7 @@
         <span class="logo">B</span>
         <div>
           <b>B-Star</b>
-          <small>虚拟编导</small>
+          <small>编导娘待命中</small>
         </div>
       </div>
       <nav class="side-nav">
@@ -37,8 +37,8 @@
           </div>
         </div>
         <div>
-          <el-button round @click="router.push('/persona')">编辑人设</el-button>
-          <el-button round plain @click="logout">退出</el-button>
+          <el-button round @click="router.push('/persona')">改人设</el-button>
+          <el-button round plain @click="logout">溜了</el-button>
         </div>
       </header>
       <main class="stage">
@@ -53,6 +53,20 @@
         </div>
       </main>
     </section>
+
+    <!-- 手机端底部导航 -->
+    <nav class="bottom-nav">
+      <button
+        v-for="item in navs"
+        :key="item.path"
+        class="bottom-tab"
+        :class="{ on: route.path === item.path }"
+        @click="router.push(item.path)"
+      >
+        <span class="face">{{ item.emoji }}</span>
+        <i>{{ item.label }}</i>
+      </button>
+    </nav>
   </div>
 </template>
 
@@ -67,15 +81,15 @@ import stickers from "../assets/kawaii-stickers.png";
 const route = useRoute();
 const router = useRouter();
 const auth = useAuthStore();
-const personaName = ref("未选择人设");
-const personaMeta = ref("完善分区与风格");
+const personaName = ref("人设待捏");
+const personaMeta = ref("先去捏一个吧～");
 
 const navs = [
-  { path: "/inspiration", label: "灵感采集", hint: "贴爆款、抽爆点", emoji: "✨" },
-  { path: "/topics", label: "选题库", hint: "短平快 / 暂缓", emoji: "📒" },
-  { path: "/ideas", label: "编导创意", hint: "3 个差异化切口", emoji: "🪄" },
+  { path: "/inspiration", label: "灵感采集", hint: "丢爆款，薅爆点", emoji: "✨" },
+  { path: "/topics", label: "选题库", hint: "标记 · 标签 · 优先级", emoji: "📒" },
+  { path: "/ideas", label: "编导创意", hint: "一发三连创意卡", emoji: "🪄" },
   { path: "/script", label: "大纲扩写", hint: "钩子 · 分镜 · 互动", emoji: "🎬" },
-  { path: "/calendar", label: "热点日历", hint: "自动捕捉 · 可编辑", emoji: "📅" },
+  { path: "/calendar", label: "热点日历", hint: "蹲点 · 可手改", emoji: "📅" },
   { path: "/settings", label: "设置", hint: "人设与模型", emoji: "⚙️" },
 ];
 
@@ -352,6 +366,84 @@ function logout() {
   .side-tab {
     grid-template-columns: 1fr;
     justify-items: center;
+  }
+}
+
+/* 手机：隐藏侧栏，用底部导航 */
+.bottom-nav {
+  display: none;
+}
+
+@media (max-width: 600px) {
+  .studio {
+    grid-template-columns: 1fr;
+    grid-template-rows: 1fr;
+  }
+  .rail {
+    display: none;
+  }
+  .bottom-nav {
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 70;
+    display: flex;
+    background: rgba(255, 255, 255, 0.94);
+    backdrop-filter: blur(16px);
+    border-top: 1px solid var(--line);
+    padding: 4px 4px calc(4px + env(safe-area-inset-bottom));
+  }
+  .bottom-tab {
+    flex: 1;
+    appearance: none;
+    border: 0;
+    background: transparent;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 2px;
+    padding: 6px 2px;
+    border-radius: 12px;
+    color: var(--muted);
+    font-size: 10px;
+    cursor: pointer;
+  }
+  .bottom-tab .face {
+    font-size: 20px;
+  }
+  .bottom-tab i {
+    font-style: normal;
+    letter-spacing: 0.02em;
+  }
+  .bottom-tab.on {
+    color: var(--accent);
+    background: rgba(255, 107, 157, 0.08);
+  }
+  .topbar {
+    height: auto;
+    min-height: 52px;
+    padding: 8px 14px;
+    gap: 8px;
+  }
+  .who em {
+    max-width: 150px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .topbar > div:last-child {
+    display: flex;
+    gap: 6px;
+  }
+  .topbar .el-button {
+    padding: 8px 10px;
+  }
+  .stage-inner {
+    padding: 14px 12px calc(24px + 68px);
+  }
+  .sticker {
+    display: none;
   }
 }
 </style>

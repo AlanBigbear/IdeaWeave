@@ -137,6 +137,14 @@ def migrate_schema() -> None:
             for name, ddl in columns.items():
                 if name not in existing:
                     conn.execute(text(f"ALTER TABLE {table} ADD COLUMN {name} {ddl}"))
+        if engine.dialect.name == "mysql" and "inspirations" in tables:
+            note_col = next(
+                (c for c in inspector.get_columns("inspirations") if c["name"] == "source_note"),
+                None,
+            )
+            if note_col and "VARCHAR" in str(note_col["type"]).upper():
+                # 来源链接可能带长跟踪参数，扩成 TEXT 防止 Data too long
+                conn.execute(text("ALTER TABLE inspirations MODIFY COLUMN source_note TEXT"))
         if "user_settings" in tables:
             conn.execute(
                 text(

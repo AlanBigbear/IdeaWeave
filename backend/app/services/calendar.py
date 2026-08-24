@@ -1,4 +1,5 @@
 from fastapi import HTTPException
+from datetime import date, timedelta
 from sqlalchemy.orm import Session
 
 from app.chains.llm import build_llm
@@ -13,7 +14,6 @@ from app.schemas import (
 )
 from app.services.common import require_persona
 from app.services.hotspots import capture_window, overlaps_window, seasonal_hints_for_persona
-from app.prompts.personas import persona_skill_fact_sheet
 
 
 def _fingerprint(title: str, start_date: str) -> tuple[str, str]:
@@ -21,8 +21,12 @@ def _fingerprint(title: str, start_date: str) -> tuple[str, str]:
 
 
 def _existing_keys(db: Session, user: User) -> set[tuple[str, str]]:
-    rows = db.query(CalendarEvent).filter(CalendarEvent.user_id == user.id).all()
-    return {_fingerprint(row.title, row.start_date) for row in rows}
+    rows = (
+        db.query(CalendarEvent.title, CalendarEvent.start_date)
+        .filter(CalendarEvent.user_id == user.id)
+        .all()
+    )
+    return {_fingerprint(title, start_date) for title, start_date in rows}
 
 
 def _insert_payload(db: Session, user: User, payload: dict, seen: set[tuple[str, str]]) -> CalendarEvent | None:
@@ -31,8 +35,12 @@ def _insert_payload(db: Session, user: User, payload: dict, seen: set[tuple[str,
     end_date = (payload.get("end_date") or start_date).strip()
     if not title:
         return None
-    if payload.get("source") == "capture" and not overlaps_window(start_date, end_date):
-        return None
+    if payload.get("source") == "capture":
+        if not overlaps_window(start_date, end_date):
+            return None
+        # 质量闸门：泛称标题 / 没写拍法的低质条目直接丢弃
+        if len(title) < 6 or not (payload.get("vlog_fit") or "").strip():
+            return None
     key = _fingerprint(title, start_date)
     if key in seen:
         return None
@@ -54,8 +62,11 @@ def _insert_payload(db: Session, user: User, payload: dict, seen: set[tuple[str,
 
 def extract(db: Session, user: User, payload: CalendarExtractIn) -> CalendarEventOut:
     persona = require_persona(db, user)
-    llm = build_llm(db, user, temperature=0.2)
-    result = invoke_or_502(extract_calendar_chain(llm, persona), {"raw_text": payload.raw_text})
+    llm = build_llm(db, user, temperature=0.2, max_tokens=500)
+    result = invoke_or_502(
+        extract_calendar_chain(llm, persona),
+        {"raw_text": payload.raw_text[:10000], "today": date.today().isoformat()},
+    )
     seen = _existing_keys(db, user)
     row = _insert_payload(
         db,
@@ -84,14 +95,23 @@ def capture(db: Session, user: User) -> CalendarCaptureOut:
     today, until = capture_window()
     hints = seasonal_hints_for_persona(persona, today)
     seen = _existing_keys(db, user)
-    llm = build_llm(db, user, temperature=0.35)
+    llm = build_llm(db, user, temperature=0.35, max_tokens=1500)
+    # 去重提示只保留窗口附近的事件标题，避免列表无限增长
+    window_from = (today - timedelta(days=7)).isoformat()
+    window_until = until.isoformat()
+    existing_titles = sorted(
+        {
+            title
+            for title, start in seen
+            if window_from <= (start or "") <= window_until
+        }
+    )
     bundle = invoke_or_502(
         capture_calendar_chain(llm, persona),
         {
             "today": today.isoformat(),
-            "until": until.isoformat(),
-            "persona_brief": persona_skill_fact_sheet(persona),
-            "existing": "、".join(sorted({title for title, _ in seen})) or "无",
+            "until": window_until,
+            "existing": "、".join(existing_titles[:40]) or "无",
             "seasonal": "；".join(
                 f"{item['title']}({item['start_date']}，{item['angle']})" for item in hints
             )
@@ -111,7 +131,7 @@ def capture(db: Session, user: User) -> CalendarCaptureOut:
                 "location": item.location,
                 "vlog_fit": item.vlog_fit,
                 "commercial": item.commercial,
-                "raw_text": "AI 按人设捕捉（未来90天）",
+                "raw_text": "AI 按人设捕捉（未来30天）",
                 "source": "capture",
             },
             seen,
@@ -126,7 +146,7 @@ def capture(db: Session, user: User) -> CalendarCaptureOut:
     return CalendarCaptureOut(
         created=len(created_rows),
         skipped=skipped,
-        warning="" if created_rows else "没有落入未来90天且符合人设的热点，请完善人设后再试",
+        warning="" if created_rows else "未来 30 天内没蹲到足够具体又符合人设的热点，可以稍后再试或手动添加",
         events=[CalendarEventOut.model_validate(row) for row in created_rows],
     )
 
