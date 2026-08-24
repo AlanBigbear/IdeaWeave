@@ -1,6 +1,7 @@
 import client from "./client";
 import type {
   CalendarEvent,
+  FetchPreview,
   IdeaSession,
   Persona,
   PersonaOptions,
@@ -28,6 +29,9 @@ export const personaApi = {
   activate: (payload: { template_key?: string; persona_id?: number }) =>
     client.post<Persona>("/personas/activate", payload),
   update: (id: number, payload: Partial<Persona>) => client.put<Persona>(`/personas/${id}`, payload),
+  generateSkill: (id: number) => client.post<Persona>(`/personas/${id}/skill`),
+  updateSkill: (id: number, skill_prompt: string) =>
+    client.put<Persona>(`/personas/${id}/skill`, { skill_prompt }),
 };
 
 export const settingsApi = {
@@ -37,8 +41,9 @@ export const settingsApi = {
 };
 
 export const inspirationApi = {
-  extract: (raw_text: string, source_note = "") =>
-    client.post<Topic>("/inspirations/extract", { raw_text, source_note }),
+  extract: (payload: { raw_text?: string; source_note?: string; url?: string }) =>
+    client.post<Topic>("/inspirations/extract", payload),
+  fetchUrl: (url: string) => client.post<FetchPreview>("/inspirations/fetch", { url }),
 };
 
 export const topicApi = {
@@ -79,7 +84,10 @@ export const scriptApi = {
 
 export const calendarApi = {
   extract: (raw_text: string) => client.post<CalendarEvent>("/calendar/extract", { raw_text }),
+  capture: () => client.post<{ created: number; skipped: number; warning: string; events: CalendarEvent[] }>("/calendar/capture"),
   list: () => client.get<CalendarEvent[]>("/calendar"),
+  create: (payload: Partial<CalendarEvent> & { title: string }) => client.post<CalendarEvent>("/calendar", payload),
+  update: (id: number, payload: Partial<CalendarEvent>) => client.patch<CalendarEvent>(`/calendar/${id}`, payload),
   remove: (id: number) => client.delete(`/calendar/${id}`),
 };
 

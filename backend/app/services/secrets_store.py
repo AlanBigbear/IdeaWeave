@@ -25,6 +25,10 @@ def get_api_key(user_id: int) -> str:
     return _load().get(str(user_id), "")
 
 
+def get_effective_api_key(user_id: int, stored: str = "") -> str:
+    return (stored or "").strip() or get_api_key(user_id) or settings.default_llm_api_key
+
+
 def set_api_key(user_id: int, api_key: str) -> None:
     data = _load()
     if api_key.strip():

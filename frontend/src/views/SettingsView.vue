@@ -22,15 +22,19 @@
             </el-form>
           </div>
         </el-card>
+        <el-card v-if="persona" header="专属编导 Skill" style="margin-top: 16px">
+          <PersonaSkillCard :persona="persona" @updated="persona = $event" />
+        </el-card>
       </el-col>
       <el-col :md="12">
         <el-card header="大模型">
+          <p class="muted">默认已接 DeepSeek（deepseek-v4-flash）。下面仍可改成其它 OpenAI 兼容接口。</p>
           <el-form label-position="top">
             <el-form-item label="Base URL">
               <el-input v-model="form.llm_base_url" placeholder="https://api.deepseek.com/v1" />
             </el-form-item>
             <el-form-item label="模型名">
-              <el-input v-model="form.llm_model" placeholder="deepseek-chat" />
+              <el-input v-model="form.llm_model" placeholder="deepseek-v4-flash" />
             </el-form-item>
             <el-form-item :label="keyLabel">
               <el-input v-model="form.llm_api_key" type="password" show-password placeholder="留空则不修改已保存的 Key" />
@@ -64,7 +68,10 @@ import { ElMessage } from "element-plus";
 import { personaApi, settingsApi } from "../api";
 import { useAuthStore } from "../stores/auth";
 import { useCatStore } from "../stores/cat";
+import PersonaSkillCard from "../components/PersonaSkillCard.vue";
 import type { Persona } from "../types";
+
+defineOptions({ name: "SettingsView" });
 
 const router = useRouter();
 const auth = useAuthStore();
@@ -107,6 +114,6 @@ async function save() {
 async function savePersona() {
   if (!persona.value) return;
   await personaApi.update(persona.value.id, persona.value);
-  ElMessage.success("人设已更新");
+  ElMessage.success("人设已更新。若分区/风格变化较大，建议在下方重新生成专属 Skill");
 }
 </script>

@@ -45,7 +45,11 @@
         <SparkleField />
         <img class="sticker s1" :src="stickers" alt="" />
         <div class="stage-inner">
-          <router-view />
+          <router-view v-slot="{ Component }">
+            <keep-alive>
+              <component :is="Component" />
+            </keep-alive>
+          </router-view>
         </div>
       </main>
     </section>
@@ -71,7 +75,7 @@ const navs = [
   { path: "/topics", label: "选题库", hint: "短平快 / 暂缓", emoji: "📒" },
   { path: "/ideas", label: "编导创意", hint: "3 个差异化切口", emoji: "🪄" },
   { path: "/script", label: "大纲扩写", hint: "钩子 · 分镜 · 互动", emoji: "🎬" },
-  { path: "/calendar", label: "热点日历", hint: "展会与节点", emoji: "📅" },
+  { path: "/calendar", label: "热点日历", hint: "自动捕捉 · 可编辑", emoji: "📅" },
   { path: "/settings", label: "设置", hint: "人设与模型", emoji: "⚙️" },
 ];
 

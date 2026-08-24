@@ -90,7 +90,7 @@
         </div>
       </section>
 
-      <section v-else>
+      <section v-else-if="step === 4">
         <h1>给这套人设起个名字</h1>
         <p>也可以一键套用模板，再改成你自己的。</p>
         <div class="templates">
@@ -125,14 +125,29 @@
           </el-button>
         </div>
       </section>
+
+      <section v-else>
+        <h1>编译你的专属编导 Skill</h1>
+        <p>
+          人设的个性化定制环节：AI 会把你前面选的分区、风格、节奏、评论习惯
+          编译成一份专属 Skill Prompt，之后灵感提取、创意发散、脚本扩写、热点日历全部按它工作。
+        </p>
+        <PersonaSkillCard v-if="created" :persona="created" @updated="created = $event" />
+        <el-alert v-else type="info" :closable="false">
+          请先回到上一步保存人设，再编译专属 Skill。
+        </el-alert>
+      </section>
     </main>
 
     <img class="corner-mascot" :src="mascot" alt="" />
     <footer class="bar">
-      <el-button v-if="step > 0" @click="step -= 1">上一步</el-button>
+      <el-button v-if="step > 0 && step < 5" @click="step -= 1">上一步</el-button>
       <span class="grow" />
       <el-button v-if="step < 4" type="primary" :disabled="!canNext" @click="step += 1">下一步</el-button>
-      <el-button v-else type="primary" :loading="saving" @click="submit">完成，进入工作台</el-button>
+      <el-button v-else-if="step === 4" type="primary" :loading="saving" @click="submit">
+        保存人设，编译 Skill
+      </el-button>
+      <el-button v-else type="primary" @click="goHome">进入工作台</el-button>
     </footer>
   </div>
 </template>
@@ -144,13 +159,15 @@ import { ElMessage } from "element-plus";
 import { personaApi } from "../api";
 import { useAuthStore } from "../stores/auth";
 import SparkleField from "../components/SparkleField.vue";
+import PersonaSkillCard from "../components/PersonaSkillCard.vue";
 import type { OptionItem, Persona, PersonaOptions, PersonaTemplate } from "../types";
 
 const mascot = "/pets/calico-sit-clear.png";
 
-const steps = ["分区", "风格", "更新", "评论", "确认"];
+const steps = ["分区", "风格", "更新", "评论", "确认", "Skill"];
 const step = ref(0);
 const saving = ref(false);
+const created = ref<Persona | null>(null);
 const router = useRouter();
 const auth = useAuthStore();
 const styles = ref<string[]>([]);
@@ -236,13 +253,18 @@ async function submit() {
     form.style_desc =
       form.style_desc ||
       `${form.zone} UP 主，内容以${form.content_style}为主，${form.update_freq}，评论区${form.comment_style}`;
-    await personaApi.setup({ ...form });
+    const { data } = await personaApi.setup({ ...form });
+    created.value = data;
     await auth.fetchMe();
-    ElMessage.success("人设已保存");
-    await router.push("/inspiration");
+    ElMessage.success("人设已保存，最后一步：编译专属 Skill");
+    step.value = 5;
   } finally {
     saving.value = false;
   }
+}
+
+function goHome() {
+  router.push("/inspiration");
 }
 </script>
 

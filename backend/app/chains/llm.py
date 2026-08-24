@@ -4,7 +4,7 @@ from sqlalchemy.orm import Session
 
 from app.core.config import settings
 from app.models import User, UserSettings
-from app.services.secrets_store import get_api_key
+from app.services.secrets_store import get_effective_api_key
 
 
 class LLMNotConfigured(HTTPException):
@@ -29,15 +29,24 @@ def get_user_settings(db: Session, user: User) -> UserSettings:
     return row
 
 
+def normalize_openai_base_url(url: str) -> str:
+    url = url.strip().rstrip("/")
+    if "api.deepseek.com" in url and not url.endswith("/v1"):
+        return f"{url}/v1"
+    return url
+
+
 def build_llm(db: Session, user: User, temperature: float = 0.6) -> ChatOpenAI:
     cfg = get_user_settings(db, user)
-    api_key = get_api_key(user.id)
-    if not cfg.llm_base_url or not cfg.llm_model or not api_key:
+    api_key = get_effective_api_key(user.id, cfg.llm_api_key)
+    base_url = normalize_openai_base_url(cfg.llm_base_url or settings.default_llm_base_url)
+    model = (cfg.llm_model or settings.default_llm_model).strip()
+    if not base_url or not model or not api_key:
         raise LLMNotConfigured()
     return ChatOpenAI(
-        model=cfg.llm_model,
+        model=model,
         api_key=api_key,
-        base_url=cfg.llm_base_url.rstrip("/"),
+        base_url=base_url,
         temperature=temperature,
         timeout=120,
         max_retries=1,

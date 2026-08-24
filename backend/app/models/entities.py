@@ -39,6 +39,9 @@ class Persona(Base):
     content_style: Mapped[str] = mapped_column(String(200), default="")
     update_freq: Mapped[str] = mapped_column(String(64), default="")
     comment_style: Mapped[str] = mapped_column(Text, default="")
+    skill_prompt: Mapped[str] = mapped_column(Text, default="")
+    skill_brief_json: Mapped[str] = mapped_column(Text, default="{}")
+    skill_generated_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
 
     user: Mapped[User] = relationship(back_populates="personas")
@@ -51,6 +54,7 @@ class UserSettings(Base):
     user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), unique=True)
     llm_base_url: Mapped[str] = mapped_column(String(255), default="")
     llm_model: Mapped[str] = mapped_column(String(120), default="")
+    llm_api_key: Mapped[str] = mapped_column(Text, default="")
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, onupdate=utcnow)
 
     user: Mapped[User] = relationship(back_populates="settings")
@@ -78,7 +82,9 @@ class Topic(Base):
     cost_note: Mapped[str] = mapped_column(Text, default="")
     why: Mapped[str] = mapped_column(Text, default="")
     source: Mapped[str] = mapped_column(String(32), default="extract")  # extract | manual
-    status: Mapped[str] = mapped_column(String(32), default="inbox")
+    status: Mapped[str] = mapped_column(String(32), default="inbox")  # inbox | ready | paused | dropped
+    priority: Mapped[str] = mapped_column(String(16), default="mid")  # high | mid | low
+    tags: Mapped[str] = mapped_column(Text, default="[]")
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
 
 
@@ -122,4 +128,5 @@ class CalendarEvent(Base):
     vlog_fit: Mapped[str] = mapped_column(Text, default="")
     commercial: Mapped[str] = mapped_column(Text, default="")
     raw_text: Mapped[str] = mapped_column(Text, default="")
+    source: Mapped[str] = mapped_column(String(32), default="extract")  # capture | extract | manual
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)

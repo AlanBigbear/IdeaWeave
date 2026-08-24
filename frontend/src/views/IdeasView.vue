@@ -30,16 +30,19 @@
         <el-button type="primary" @click="select(index)">选定并去写脚本</el-button>
       </el-card>
     </div>
-    <el-empty v-if="!session" description="生成后会出现 3 张差异化创意卡" />
+    <el-empty v-if="!session && !loading" description="生成后会出现 3 张差异化创意卡" />
+    <el-empty v-else-if="loading && !session" description="正在生成 3 个创意，切到其它页也不会中断" />
   </div>
 </template>
 
 <script setup lang="ts">
-import { onMounted, ref } from "vue";
+import { onActivated, onMounted, ref } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { ElMessage } from "element-plus";
 import { ideaApi, topicApi } from "../api";
 import type { IdeaSession, Topic } from "../types";
+
+defineOptions({ name: "IdeasView" });
 
 const route = useRoute();
 const router = useRouter();
@@ -49,11 +52,24 @@ const vague = ref("");
 const loading = ref(false);
 const session = ref<IdeaSession | null>(null);
 
-onMounted(async () => {
-  const { data } = await topicApi.list();
-  topics.value = data;
+function applyQuery() {
   if (route.query.topicId) topicId.value = Number(route.query.topicId);
   if (route.query.hint) vague.value = String(route.query.hint);
+}
+
+async function loadTopics() {
+  const { data } = await topicApi.list();
+  topics.value = data;
+}
+
+onMounted(async () => {
+  await loadTopics();
+  applyQuery();
+});
+
+onActivated(async () => {
+  applyQuery();
+  await loadTopics();
 });
 
 async function diverge() {

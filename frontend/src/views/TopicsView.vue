@@ -72,6 +72,8 @@ import { ElMessage } from "element-plus";
 import { topicApi } from "../api";
 import type { Topic } from "../types";
 
+defineOptions({ name: "TopicsView" });
+
 const router = useRouter();
 const topics = ref<Topic[]>([]);
 const feasibility = ref("");
