@@ -2,7 +2,7 @@
   <div>
     <div class="page-head">
       <h2>设置</h2>
-      <p>人设随时改；大模型用 OpenAI 兼容接口，Key 只存在本机。</p>
+      <p>人设想改就改；模型走 OpenAI 兼容接口，Key 只待在你自己电脑里～</p>
     </div>
     <el-row :gutter="16">
       <el-col :md="12">
@@ -18,7 +18,7 @@
               <el-form-item label="禁忌"><el-input v-model="persona.taboos" /></el-form-item>
               <el-form-item label="口吻"><el-input v-model="persona.sample_tone" type="textarea" :rows="3" /></el-form-item>
               <el-button type="primary" round @click="savePersona">保存人设</el-button>
-              <el-button round @click="router.push('/persona')">重新引导选择</el-button>
+              <el-button round @click="router.push('/persona')">重走一遍选择</el-button>
             </el-form>
           </div>
         </el-card>
@@ -28,7 +28,7 @@
       </el-col>
       <el-col :md="12">
         <el-card header="大模型">
-          <p class="muted">默认已接 DeepSeek（deepseek-v4-flash）。下面仍可改成其它 OpenAI 兼容接口。</p>
+          <p class="muted">默认已经接好 DeepSeek（deepseek-v4-flash），想换成别的 OpenAI 兼容模型也随你～</p>
           <el-form label-position="top">
             <el-form-item label="Base URL">
               <el-input v-model="form.llm_base_url" placeholder="https://api.deepseek.com/v1" />
@@ -105,7 +105,7 @@ async function save() {
     });
     hasKey.value = data.has_api_key;
     form.llm_api_key = "";
-    ElMessage.success("设置已保存");
+    ElMessage.success("存好了～");
   } finally {
     saving.value = false;
   }
@@ -114,6 +114,6 @@ async function save() {
 async function savePersona() {
   if (!persona.value) return;
   await personaApi.update(persona.value.id, persona.value);
-  ElMessage.success("人设已更新。若分区/风格变化较大，建议在下方重新生成专属 Skill");
+  ElMessage.success("人设更新好了！分区/风格变化大的话，建议在下面重新套一次预置模板或 AI 生成");
 }
 </script>

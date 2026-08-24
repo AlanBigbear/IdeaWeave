@@ -8,6 +8,7 @@ from app.chains.pipelines import generate_persona_skill_chain, invoke_or_502
 from app.models import Persona, User
 from app.prompts.personas import PERSONA_OPTIONS, PERSONA_TEMPLATES, get_template
 from app.schemas import PersonaIn
+from app.services.skill_presets import build_preset_skill, build_preset_skill_from_template, list_preset_templates
 
 
 def list_user_personas(db: Session, user: User) -> list[Persona]:
@@ -21,9 +22,22 @@ def get_owned_persona(db: Session, user: User, persona_id: int) -> Persona:
     return persona
 
 
+def _apply_preset_skill(persona: Persona) -> None:
+    preset = build_preset_skill(persona)
+    persona.skill_prompt = preset["system_prompt"]
+    persona.skill_brief_json = _dump_brief(preset)
+    persona.skill_generated_at = datetime.now(timezone.utc)
+
+
+def _dump_brief(preset: dict) -> str:
+    import json
+
+    return json.dumps(preset, ensure_ascii=False)
+
+
 def generate_skill(db: Session, user: User, persona_id: int) -> Persona:
     persona = get_owned_persona(db, user, persona_id)
-    llm = build_llm(db, user, temperature=0.7)
+    llm = build_llm(db, user, temperature=0.7, max_tokens=1200)
     chain = generate_persona_skill_chain(llm, persona)
     skill = invoke_or_502(chain, {})
     persona.skill_prompt = skill.system_prompt.strip()
@@ -58,10 +72,32 @@ def setup_persona(db: Session, user: User, payload: PersonaIn) -> Persona:
     persona = Persona(user_id=user.id, **_persona_fields(payload))
     db.add(persona)
     db.flush()
+    _apply_preset_skill(persona)
     user.active_persona_id = persona.id
     db.commit()
     db.refresh(persona)
     return persona
+
+
+def apply_preset_skill(db: Session, user: User, persona_id: int, template_key: str | None = None) -> Persona:
+    persona = get_owned_persona(db, user, persona_id)
+    preset = (
+        build_preset_skill_from_template(persona, template_key)
+        if template_key
+        else build_preset_skill(persona)
+    )
+    if preset is None:
+        raise HTTPException(status_code=404, detail="Skill 模板不存在")
+    persona.skill_prompt = preset["system_prompt"]
+    persona.skill_brief_json = _dump_brief(preset)
+    persona.skill_generated_at = datetime.now(timezone.utc)
+    db.commit()
+    db.refresh(persona)
+    return persona
+
+
+def preset_templates() -> list[dict]:
+    return list_preset_templates()
 
 
 def activate_template(db: Session, user: User, template_key: str) -> Persona:

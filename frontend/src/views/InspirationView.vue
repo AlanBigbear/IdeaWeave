@@ -2,7 +2,7 @@
   <div>
     <div class="page-head">
       <h2>灵感采集</h2>
-      <p>贴一段爆款摘要，或丢一个链接让 AI 自动去读原文，都能抽爆点入库。</p>
+      <p>刷到的爆款直接丢进来，贴文字或甩链接都行，编导娘帮你把爆点薅出来～</p>
     </div>
     <el-row :gutter="16">
       <el-col :md="14">
@@ -26,38 +26,40 @@
                   @keyup.enter="extractByLink"
                 >
                   <template #append>
-                    <el-button :loading="loading" @click="extractByLink">抓取并提取</el-button>
+                    <el-button :loading="loading" @click="extractByLink">冲！抓取提取</el-button>
                   </template>
                 </el-input>
               </el-form-item>
               <p class="tip">
-                支持公众号文章、新闻页、B 站专栏等能直接打开的页面；需要登录或纯 JS
-                渲染的页面可能抓不到正文，可切回文本模式粘贴。点
+                公众号文章、新闻页、B 站专栏这种能直接打开的页面都支持；要登录或纯 JS
+                渲染的页面可能薅不到正文，切回文本模式粘进来就好。点
                 <el-button text size="small" :loading="fetching" @click="preview">先预览抓取内容</el-button>
-                可先看看抓到了什么，也可编辑后再提取。
+                看看抓到了啥，也能编辑后再提取。
               </p>
+              <AiProgress :active="fetching" variant="fetch" />
             </template>
             <el-form-item v-if="mode === 'text'" label="爆款摘要">
               <el-input
                 v-model="rawText"
                 type="textarea"
                 :rows="12"
-                placeholder="把你整理的爆款内容粘贴到这里，或用右侧链接模式自动抓取"
+                placeholder="把你整理的爆款内容丢到这里，或者用右边的链接模式自动抓"
               />
             </el-form-item>
             <el-form-item label="来源备注（可选）">
-              <el-input v-model="sourceNote" placeholder="例如：自己存的爆款笔记 / 评论区总结，链接模式留空则自动记来源" />
+              <el-input v-model="sourceNote" placeholder="例如：自己存的爆款笔记 / 评论区总结；链接模式留空会自动记来源" />
             </el-form-item>
             <el-space v-if="mode === 'text'">
-              <el-button type="primary" :loading="loading" @click="extractByText">提取并入库</el-button>
-              <el-button @click="rawText = SAMPLE_VIRAL">填入路演示例</el-button>
+              <el-button type="primary" :loading="loading" @click="extractByText">提取入库～</el-button>
+              <el-button @click="rawText = SAMPLE_VIRAL">塞个示例</el-button>
             </el-space>
           </el-form>
+          <AiProgress :active="loading" variant="extract" />
         </el-card>
       </el-col>
       <el-col :md="10">
         <el-card v-if="result">
-          <template #header>提取结果（已写入选题库）</template>
+          <template #header>提炼完成！已收进选题库</template>
           <h3>{{ result.title }}</h3>
           <el-tag :type="result.feasibility === 'quick' ? 'success' : 'warning'">
             {{ result.feasibility === "quick" ? "短平快可执行" : "高成本暂缓" }}
@@ -67,9 +69,9 @@
           <ul>
             <li v-for="item in result.highlights" :key="item">{{ item }}</li>
           </ul>
-          <el-button type="primary" link @click="router.push('/topics')">去选题库查看</el-button>
+          <el-button type="primary" link @click="router.push('/topics')">去选题库瞅一眼</el-button>
         </el-card>
-        <el-empty v-else description="提取结果会显示在这里" />
+        <el-empty v-else description="提炼出的选题会在这里等你" />
       </el-col>
     </el-row>
   </div>
@@ -81,6 +83,7 @@ import { useRouter } from "vue-router";
 import { ElMessage } from "element-plus";
 import { inspirationApi } from "../api";
 import { SAMPLE_VIRAL, type Topic } from "../types";
+import AiProgress from "../components/AiProgress.vue";
 
 defineOptions({ name: "InspirationView" });
 
@@ -111,7 +114,7 @@ async function extractByText() {
   try {
     const { data } = await inspirationApi.extract({ raw_text: rawText.value, source_note: sourceNote.value });
     result.value = data;
-    ElMessage.success("已写入选题库");
+    ElMessage.success("收进选题库啦！");
   } finally {
     loading.value = false;
   }
@@ -124,7 +127,7 @@ async function extractByLink() {
   try {
     const { data } = await inspirationApi.extract({ url: link, source_note: sourceNote.value });
     result.value = data;
-    ElMessage.success("已抓取原文并写入选题库");
+    ElMessage.success("原文到手，已收进选题库！");
   } finally {
     loading.value = false;
   }
@@ -140,7 +143,7 @@ async function preview() {
     mode.value = "text";
     if (!sourceNote.value) sourceNote.value = `链接抓取：${data.url}`;
     ElMessage.success(
-      data.truncated ? "已抓取正文（较长已截断），可直接编辑后提取" : "已抓取正文，可直接编辑后提取",
+      data.truncated ? "正文到手（太长已截断），改改再提取～" : "正文到手，改改就能提取～",
     );
   } finally {
     fetching.value = false;

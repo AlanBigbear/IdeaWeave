@@ -101,6 +101,8 @@ class OptionItem(BaseModel):
 class PersonaOptionsOut(BaseModel):
     zones: list[OptionItem]
     content_styles: list[str]
+    zone_content_styles: dict[str, list[str]] = {}
+    common_content_styles: list[str] = []
     update_freqs: list[OptionItem]
     comment_styles: list[OptionItem]
 
@@ -125,9 +127,19 @@ class SettingsIn(BaseModel):
 
 
 class ExtractInspirationIn(BaseModel):
-    raw_text: str = ""
-    source_note: str = ""
-    url: str = ""
+    raw_text: str = Field(default="", max_length=100000)
+    source_note: str = Field(default="", max_length=2000)
+    url: str = Field(default="", max_length=2000)
+
+    @field_validator("raw_text")
+    @classmethod
+    def _clip_raw_text(cls, value: str) -> str:
+        return value[:20000]
+
+    @field_validator("source_note", "url")
+    @classmethod
+    def _clip_short(cls, value: str) -> str:
+        return value[:500] if len(value) <= 2000 else value[:2000]
 
     @model_validator(mode="after")
     def _require_content(self):
@@ -208,8 +220,13 @@ class IdeaItem(BaseModel):
 
 
 class DivergeIn(BaseModel):
-    vague_idea: str = Field(min_length=4)
+    vague_idea: str = Field(min_length=4, max_length=100000)
     topic_id: int | None = None
+
+    @field_validator("vague_idea")
+    @classmethod
+    def _clip_vague(cls, value: str) -> str:
+        return value[:2000]
 
 
 class IdeaSessionOut(BaseModel):
@@ -254,12 +271,27 @@ class RiskItemOut(BaseModel):
 
 
 class ExpandScriptIn(BaseModel):
-    outline: str = Field(min_length=8)
-    shot_list: str = ""
-    comments_text: str = ""
+    outline: str = Field(min_length=8, max_length=100000)
+    shot_list: str = Field(default="", max_length=100000)
+    comments_text: str = Field(default="", max_length=100000)
     use_mock_comments: bool = True
     topic_id: int | None = None
     idea_session_id: int | None = None
+
+    @field_validator("outline")
+    @classmethod
+    def _clip_outline(cls, value: str) -> str:
+        return value[:20000]
+
+    @field_validator("shot_list")
+    @classmethod
+    def _clip_shot_list(cls, value: str) -> str:
+        return value[:4000]
+
+    @field_validator("comments_text")
+    @classmethod
+    def _clip_comments(cls, value: str) -> str:
+        return value[:8000]
 
 
 class ScriptOut(BaseModel):
@@ -276,7 +308,12 @@ class ScriptOut(BaseModel):
 
 
 class CalendarExtractIn(BaseModel):
-    raw_text: str = Field(min_length=8)
+    raw_text: str = Field(min_length=8, max_length=100000)
+
+    @field_validator("raw_text")
+    @classmethod
+    def _clip_raw(cls, value: str) -> str:
+        return value[:20000]
 
 
 class CalendarEventIn(BaseModel):

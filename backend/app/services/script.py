@@ -24,6 +24,17 @@ def script_to_out(row: Script) -> ScriptOut:
     )
 
 
+def _idea_hint_text(ideas: list[dict], selected_index: int | None) -> str:
+    """把创意渲染成紧凑文本，替代整段 JSON dump（省 token、模型更好读）。"""
+    if selected_index is not None and selected_index < len(ideas):
+        idea = ideas[selected_index]
+        parts = [f"标题：{idea.get('title', '')}", f"角度：{idea.get('angle', '')}",
+                 f"钩子：{idea.get('hook', '')}", f"受众：{idea.get('audience', '')}"]
+        return "；".join(p for p in parts if p.split("：", 1)[-1])
+    titles = "、".join(str(idea.get("title", "")) for idea in ideas)
+    return f"未选定，三个方案标题：{titles}" if titles else "无"
+
+
 def expand(db: Session, user: User, payload: ExpandScriptIn) -> ScriptOut:
     persona = require_persona(db, user)
     idea_hint = "无"
@@ -31,20 +42,16 @@ def expand(db: Session, user: User, payload: ExpandScriptIn) -> ScriptOut:
         session = db.get(IdeaSession, payload.idea_session_id)
         if session is None or session.user_id != user.id:
             raise HTTPException(status_code=404, detail="创意会话不存在")
-        ideas = loads(session.ideas_json, [])
-        if session.selected_index is not None and session.selected_index < len(ideas):
-            idea_hint = dumps(ideas[session.selected_index])
-        else:
-            idea_hint = dumps(ideas)
+        idea_hint = _idea_hint_text(loads(session.ideas_json, []), session.selected_index)
     _, comments = resolve_comments(payload.use_mock_comments, payload.comments_text)
     comments_blob = "\n".join(f"- {item}" for item in comments) or "（无评论）"
-    llm = build_llm(db, user, temperature=0.55)
+    llm = build_llm(db, user, temperature=0.55, max_tokens=4000)
     bundle = invoke_or_502(
         expand_script_chain(llm, persona),
         {
-            "outline": payload.outline,
-            "shot_list": payload.shot_list or "未提供，请按体验派长视频自行补全拍摄要点",
-            "comments": comments_blob,
+            "outline": payload.outline[:8000],
+            "shot_list": (payload.shot_list or "未提供，请按人设视频形态自行补全拍摄要点")[:2000],
+            "comments": comments_blob[:4000],
             "idea_hint": idea_hint,
         },
     )

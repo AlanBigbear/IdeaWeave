@@ -2,7 +2,7 @@
   <div>
     <div class="page-head">
       <h2>大纲扩写脚本</h2>
-      <p>输入大纲 + 拍摄清单，生成钩子、台词、镜头、互动；附 6 套封面 Prompt 与审核风险。</p>
+      <p>丢进大纲和拍摄清单，钩子、台词、分镜、互动一次配齐，还附赠 6 套封面 Prompt 和风险自查～</p>
     </div>
     <el-row :gutter="16">
       <el-col :md="10">
@@ -15,15 +15,16 @@
               <el-input v-model="shotList" type="textarea" :rows="3" />
             </el-form-item>
             <el-space>
-              <el-button type="primary" :loading="loading" @click="expand">生成脚本</el-button>
-              <el-button @click="fillSample">填入路演示例</el-button>
+              <el-button type="primary" :loading="loading" @click="expand">开写！</el-button>
+              <el-button @click="fillSample">塞个示例</el-button>
             </el-space>
-            <p v-if="status" class="muted">{{ status }}</p>
+            <AiProgress :active="loading" variant="extract" />
+            <p v-if="status && !loading" class="muted">{{ status }}</p>
           </el-form>
         </el-card>
       </el-col>
       <el-col :md="14">
-        <el-empty v-if="!record" description="脚本、封面 Prompt、风险预警会显示在右侧" />
+        <el-empty v-if="!record" description="写好的脚本会在右边展开" />
         <template v-else>
           <el-card>
             <template #header>{{ record.script.title }} · {{ record.script.duration_hint }}</template>
@@ -39,7 +40,7 @@
             <p><b>结尾 CTA</b> {{ record.script.cta }}</p>
           </el-card>
           <el-card style="margin-top: 12px">
-            <template #header>6 套封面生图 Prompt（不生图）</template>
+            <template #header>6 套封面生图 Prompt（拿去喂绘图工具）</template>
             <el-collapse>
               <el-collapse-item v-for="(cover, i) in record.cover_prompts" :key="i" :title="`${i + 1}. ${cover.style}`">
                 {{ cover.prompt }}
@@ -47,7 +48,7 @@
             </el-collapse>
           </el-card>
           <el-card style="margin-top: 12px">
-            <template #header>脚本风险预警</template>
+            <template #header>风险自查（发布前过一遍）</template>
             <el-table :data="record.risks">
               <el-table-column prop="level" label="级别" width="80" />
               <el-table-column prop="category" label="类型" width="120" />
@@ -67,6 +68,7 @@ import { useRoute } from "vue-router";
 import { ElMessage } from "element-plus";
 import { expandScriptStream } from "../api";
 import { SAMPLE_OUTLINE, SAMPLE_SHOTLIST, type ScriptRecord } from "../types";
+import AiProgress from "../components/AiProgress.vue";
 
 defineOptions({ name: "ScriptView" });
 
@@ -95,11 +97,11 @@ function fillSample() {
 
 async function expand() {
   if (outline.value.trim().length < 8) {
-    ElMessage.warning("请先填写大纲");
+    ElMessage.warning("先写点大纲嘛");
     return;
   }
   loading.value = true;
-  status.value = "正在连接模型...";
+  status.value = "正在唤醒编导娘…";
   try {
     record.value = await expandScriptStream(
       {
@@ -112,7 +114,8 @@ async function expand() {
         status.value = msg;
       },
     );
-    ElMessage.success("脚本已生成");
+    status.value = "";
+    ElMessage.success("脚本出炉！");
   } catch (err) {
     ElMessage.error(err instanceof Error ? err.message : "生成失败");
   } finally {

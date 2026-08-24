@@ -1,0 +1,38 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <defs>
+    <linearGradient id="g" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#ff9ec4"/>
+      <stop offset="100%" stop-color="#fb7299"/>
+    </linearGradient>
+  </defs>
+  <rect x="2" y="2" width="60" height="60" rx="16" fill="url(#g)"/>
+
+  <!-- 左耳 -->
+  <path d="M14.5,31 Q13,12.5 21,9.5 Q28,11 30,20.5 Z" fill="#ffffff"/>
+  <path d="M18.5,26 Q17.8,15 22,13 Q26,14 27,19 Z" fill="#ffc2d4"/>
+  <!-- 右耳 -->
+  <path d="M49.5,31 Q51,12.5 43,9.5 Q36,11 34,20.5 Z" fill="#ffffff"/>
+  <path d="M45.5,26 Q46.2,15 42,13 Q38,14 37,19 Z" fill="#ffc2d4"/>
+
+  <!-- 圆脸 -->
+  <ellipse cx="32" cy="37" rx="17" ry="15" fill="#ffffff"/>
+
+  <!-- 眼睛 + 高光 -->
+  <circle cx="25.5" cy="36" r="2.7" fill="#4a3b42"/>
+  <circle cx="38.5" cy="36" r="2.7" fill="#4a3b42"/>
+  <circle cx="24.7" cy="35.1" r="0.85" fill="#ffffff"/>
+  <circle cx="37.7" cy="35.1" r="0.85" fill="#ffffff"/>
+
+  <!-- 小鼻头 -->
+  <path d="M30.7,38.9 Q32,37.9 33.3,38.9 Q32,40.5 30.7,38.9 Z" fill="#fb7299"/>
+
+  <!-- ω 嘴 -->
+  <path d="M28.3,41.3 Q30.15,43.4 32,41.3 Q33.85,43.4 35.7,41.3" fill="none" stroke="#4a3b42" stroke-width="1.5" stroke-linecap="round"/>
+
+  <!-- 腮红 -->
+  <ellipse cx="20.5" cy="40.8" rx="3" ry="1.9" fill="#ffc2d4"/>
+  <ellipse cx="43.5" cy="40.8" rx="3" ry="1.9" fill="#ffc2d4"/>
+
+  <!-- 头顶小星星 -->
+  <path d="M50,11.5 L51.1,14.4 L54,15.5 L51.1,16.6 L50,19.5 L48.9,16.6 L46,15.5 L48.9,14.4 Z" fill="#ffffff" opacity="0.95"/>
+</svg>

@@ -2,7 +2,7 @@ from datetime import date, timedelta
 
 from app.prompts.personas import PERSONA_OPTIONS
 
-HORIZON_DAYS = 90
+HORIZON_DAYS = 30
 
 _ZONE_LABEL_TO_KEY = {item["label"]: item["key"] for item in PERSONA_OPTIONS["zones"]}
 

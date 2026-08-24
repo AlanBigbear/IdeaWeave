@@ -12,8 +12,7 @@
     <span v-if="bubble" class="bubble">{{ bubble }}</span>
     <button class="stay" type="button" @pointerdown.stop @click.stop="toggleStay">
       {{ cat.roam ? "别跑了" : "可以跑" }}
-    </button>
-  </div>
+    </button>  </div>
 </template>
 
 <script setup lang="ts">
@@ -34,21 +33,29 @@ const y = ref(window.innerHeight - SIZE - 24);
 const flip = ref(false);
 const dragging = ref(false);
 const bubble = ref("");
+const isMobile = ref(window.matchMedia("(max-width: 600px)").matches);
 let timer = 0;
 let dragOff = { x: 0, y: 0 };
 let didDrag = false;
 
 const catSrc = computed(() => POSES[mood.value]);
+const petSize = computed(() => (isMobile.value ? 76 : SIZE));
 const style = computed(() => ({
   transform: `translate(${x.value}px, ${y.value}px)`,
+  width: `${petSize.value}px`,
   transition: dragging.value ? "none" : "transform 2.8s cubic-bezier(.4,.1,.2,1)",
 }));
 
 function clamp() {
-  const maxX = Math.max(8, window.innerWidth - SIZE - 8);
-  const maxY = Math.max(8, window.innerHeight - SIZE - 8);
+  const maxX = Math.max(8, window.innerWidth - petSize.value - 8);
+  const maxY = Math.max(8, window.innerHeight - petSize.value - 8);
   x.value = Math.min(maxX, Math.max(8, x.value));
   y.value = Math.min(maxY, Math.max(8, y.value));
+}
+
+function onResize() {
+  isMobile.value = window.matchMedia("(max-width: 600px)").matches;
+  clamp();
 }
 
 function roam() {
@@ -66,8 +73,8 @@ function roam() {
     schedule(1400 + Math.random() * 1600);
     return;
   }
-  const nx = 16 + Math.random() * (window.innerWidth - SIZE - 32);
-  const ny = 16 + Math.random() * (window.innerHeight - SIZE - 32);
+  const nx = 16 + Math.random() * (window.innerWidth - petSize.value - 32);
+  const ny = 16 + Math.random() * (window.innerHeight - petSize.value - 32);
   flip.value = nx < x.value;
   mood.value = "walk";
   bubble.value = "";
@@ -140,6 +147,7 @@ onMounted(() => {
   clamp();
   window.addEventListener("pointermove", onMove);
   window.addEventListener("pointerup", onUp);
+  window.addEventListener("resize", onResize);
   if (cat.roam) schedule(800);
   else park();
 });
@@ -156,6 +164,7 @@ onUnmounted(() => {
   window.clearTimeout(timer);
   window.removeEventListener("pointermove", onMove);
   window.removeEventListener("pointerup", onUp);
+  window.removeEventListener("resize", onResize);
 });
 </script>
 
@@ -165,7 +174,6 @@ onUnmounted(() => {
   left: 0;
   top: 0;
   z-index: 80;
-  width: 128px;
   cursor: grab;
   user-select: none;
   filter: drop-shadow(0 10px 12px rgba(40, 24, 16, 0.18));
@@ -177,8 +185,8 @@ onUnmounted(() => {
 }
 
 .pet .sprite {
-  width: 128px;
-  height: 128px;
+  width: 100%;
+  aspect-ratio: 1;
 }
 
 .pet .sprite.flip {
@@ -186,8 +194,8 @@ onUnmounted(() => {
 }
 
 .pet img {
-  width: 128px;
-  height: 128px;
+  width: 100%;
+  height: 100%;
   object-fit: contain;
   pointer-events: none;
   background: transparent;
@@ -226,6 +234,14 @@ onUnmounted(() => {
   cursor: pointer;
   white-space: nowrap;
   letter-spacing: 0.04em;
+}
+
+/* 触屏：加大点击热区 */
+@media (pointer: coarse) {
+  .stay {
+    padding: 6px 14px;
+    font-size: 12px;
+  }
 }
 
 .stay:hover {

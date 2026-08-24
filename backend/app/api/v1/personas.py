@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
-from app.core.database import get_db
+from app.core.database import SessionLocal, get_db
 from app.core.deps import get_current_user
 from app.models import User
 from app.schemas import (
@@ -12,6 +12,7 @@ from app.schemas import (
     PersonaSkillUpdateIn,
     PersonaTemplateOut,
 )
+from app.services import jobs as jobs_service
 from app.services import persona as persona_service
 
 router = APIRouter(prefix="/personas", tags=["personas"])
@@ -82,6 +83,38 @@ def generate_persona_skill(
     return persona_service.generate_skill(db, user, persona_id)
 
 
+@router.post("/{persona_id}/skill/async")
+def generate_persona_skill_async(
+    persona_id: int,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    persona_service.get_owned_persona(db, user, persona_id)
+
+    def task() -> dict:
+        session = SessionLocal()
+        try:
+            owner = session.get(User, user.id)
+            persona = persona_service.generate_skill(session, owner, persona_id)
+            return {"persona": PersonaOut.model_validate(persona).model_dump()}
+        finally:
+            session.close()
+
+    job_id = jobs_service.submit(f"skill:{user.id}:{persona_id}", task)
+    return {"job_id": job_id}
+
+
+@router.get("/skill-jobs/{job_id}")
+def skill_job_status(job_id: str, user: User = Depends(get_current_user)):
+    job = jobs_service.get(job_id)
+    if job is None:
+        raise HTTPException(status_code=404, detail="任务不存在或已过期")
+    payload: dict = {"status": job.status, "error": job.error, "persona": None}
+    if job.status == "done":
+        payload["persona"] = job.result.get("persona")
+    return payload
+
+
 @router.put("/{persona_id}/skill", response_model=PersonaOut)
 def update_persona_skill(
     persona_id: int,
@@ -90,3 +123,19 @@ def update_persona_skill(
     db: Session = Depends(get_db),
 ):
     return persona_service.update_skill(db, user, persona_id, payload.skill_prompt)
+
+
+@router.get("/skill-templates")
+def skill_templates(user: User = Depends(get_current_user)):
+    return persona_service.preset_templates()
+
+
+@router.post("/{persona_id}/skill/preset", response_model=PersonaOut)
+def apply_preset_persona_skill(
+    persona_id: int,
+    payload: dict | None = None,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    template_key = (payload or {}).get("template_key")
+    return persona_service.apply_preset_skill(db, user, persona_id, template_key)

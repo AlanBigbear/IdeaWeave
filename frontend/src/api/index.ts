@@ -8,6 +8,7 @@ import type {
   PersonaTemplate,
   ScriptRecord,
   Settings,
+  SkillTemplate,
   Topic,
   User,
 } from "../types";
@@ -30,8 +31,16 @@ export const personaApi = {
     client.post<Persona>("/personas/activate", payload),
   update: (id: number, payload: Partial<Persona>) => client.put<Persona>(`/personas/${id}`, payload),
   generateSkill: (id: number) => client.post<Persona>(`/personas/${id}/skill`),
+  generateSkillAsync: (id: number) =>
+    client.post<{ job_id: string }>(`/personas/${id}/skill/async`),
+  skillJob: (jobId: string) =>
+    client.get<{ status: string; error: string; persona: Persona | null }>(`/personas/skill-jobs/${jobId}`),
   updateSkill: (id: number, skill_prompt: string) =>
     client.put<Persona>(`/personas/${id}/skill`, { skill_prompt }),
+  applyPresetSkill: (id: number, template_key?: string) =>
+    client.post<Persona>(`/personas/${id}/skill/preset`, template_key ? { template_key } : {}),
+  skillTemplates: () =>
+    client.get<SkillTemplate[]>("/personas/skill-templates"),
 };
 
 export const settingsApi = {
@@ -47,7 +56,7 @@ export const inspirationApi = {
 };
 
 export const topicApi = {
-  list: (params?: { feasibility?: string; q?: string }) =>
+  list: (params?: { feasibility?: string; q?: string; status?: string; priority?: string; tag?: string }) =>
     client.get<Topic[]>("/topics", { params }),
   create: (payload: {
     title: string;
@@ -55,11 +64,14 @@ export const topicApi = {
     feasibility?: string;
     cost_note?: string;
     why?: string;
+    status?: string;
+    priority?: string;
+    tags?: string[];
   }) => client.post<Topic>("/topics", payload),
   patch: (id: number, payload: Partial<Topic>) => client.patch<Topic>(`/topics/${id}`, payload),
   remove: (id: number) => client.delete(`/topics/${id}`),
-  exportMd: (feasibility?: string) =>
-    client.get<string>("/topics/export.md", { params: { feasibility }, responseType: "text" }),
+  exportMd: (params?: { feasibility?: string; status?: string; priority?: string; tag?: string }) =>
+    client.get<string>("/topics/export.md", { params, responseType: "text" }),
 };
 
 export const ideaApi = {

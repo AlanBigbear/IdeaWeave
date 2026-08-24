@@ -2,28 +2,39 @@
   <div>
     <div class="page-head">
       <h2>热点日历</h2>
-      <p>按当前人设捕捉未来 90 天相关热点；也可手动添加、改、删。点日历日期可直接记一条。</p>
+      <p>按你的人设蹲未来 30 天的热点，宁缺毋滥只留能拍的～点日历上的日期直接开写。</p>
     </div>
 
     <el-card>
       <el-space wrap>
-        <el-button type="primary" :loading="capturing" @click="capture">按人设捕捉未来 90 天</el-button>
+        <el-button type="primary" :loading="capturing" @click="capture">蹲一波未来 30 天热点</el-button>
         <el-button @click="openCreate()">手动添加</el-button>
-        <el-button @click="showPaste = !showPaste">从文本提取</el-button>
+        <el-button @click="showPaste = !showPaste">从文本里薅一条</el-button>
       </el-space>
       <div v-if="showPaste" class="paste-box">
-        <el-input v-model="rawText" type="textarea" :rows="3" placeholder="粘贴展会 / 热点原文，AI 抽成一条日历" />
+        <el-input v-model="rawText" type="textarea" :rows="3" placeholder="把展会 / 热点原文丢进来，编导娘帮你排进日历" />
         <el-space style="margin-top: 8px">
-          <el-button type="primary" :loading="extracting" @click="extract">提取入库</el-button>
+          <el-button type="primary" :loading="extracting" @click="extract">排进日历</el-button>
           <el-button @click="rawText = SAMPLE_HOTSPOT">填入示例</el-button>
         </el-space>
       </div>
+      <AiProgress :active="capturing || extracting" variant="calendar" />
     </el-card>
 
     <el-row :gutter="16" style="margin-top: 16px">
-      <el-col :md="14">
+      <el-col :md="14" :xs="24">
         <el-card>
           <el-calendar v-model="calDate">
+            <template #header>
+              <div class="cal-head">
+                <b>{{ calDate.getFullYear() }} 年 {{ calDate.getMonth() + 1 }} 月</b>
+                <el-button-group>
+                  <el-button size="small" @click="calDate = new Date(calDate.getFullYear(), calDate.getMonth() - 1, 1)">‹ 上月</el-button>
+                  <el-button size="small" @click="calDate = new Date()">今天</el-button>
+                  <el-button size="small" @click="calDate = new Date(calDate.getFullYear(), calDate.getMonth() + 1, 1)">下月 ›</el-button>
+                </el-button-group>
+              </div>
+            </template>
             <template #date-cell="{ data }">
               <div class="cell" :class="{ today: data.isToday, selected: data.isSelected }" @click="pickDay(data.day)">
                 <span class="num">{{ dayNum(data.day) }}</span>
@@ -34,7 +45,7 @@
           </el-calendar>
         </el-card>
       </el-col>
-      <el-col :md="10">
+      <el-col :md="10" :xs="24">
         <el-card>
           <template #header>
             <div class="list-head">
@@ -42,7 +53,7 @@
               <el-button link type="primary" @click="openCreate(selectedDay)">+ 这一天</el-button>
             </div>
           </template>
-          <el-empty v-if="!dayEvents.length" description="这天还没有热点" />
+          <el-empty v-if="!dayEvents.length" description="这天还空空的" />
           <div v-for="item in dayEvents" :key="item.id" class="event">
             <div class="event-top">
               <b>{{ item.title }}</b>
@@ -75,9 +86,9 @@
         </el-space>
       </el-card>
     </div>
-    <el-empty v-if="!events.length && !capturing" description="还没有热点，先点「按人设捕捉未来 90 天」" />
+    <el-empty v-if="!events.length && !capturing" description="热点列表空空的，先在上面蹲一波吧" />
 
-    <el-dialog v-model="showForm" :title="editingId ? '修改热点' : '添加热点'" width="520px">
+    <el-dialog v-model="showForm" :title="editingId ? '修改热点' : '添加热点'" width="min(520px, 94vw)">
       <el-form label-position="top">
         <el-form-item label="标题">
           <el-input v-model="form.title" />
@@ -112,6 +123,7 @@ import { useRouter } from "vue-router";
 import { ElMessage, ElMessageBox } from "element-plus";
 import { calendarApi } from "../api";
 import { SAMPLE_HOTSPOT, type CalendarEvent } from "../types";
+import AiProgress from "../components/AiProgress.vue";
 
 defineOptions({ name: "CalendarView" });
 
@@ -181,8 +193,8 @@ async function capture() {
   try {
     const { data } = await calendarApi.capture();
     if (data.warning) ElMessage.warning(data.warning);
-    else if (data.created) ElMessage.success(`已捕捉 ${data.created} 条热点`);
-    else ElMessage.info("没有新的人设相关热点，或都已在日历里");
+    else if (data.created) ElMessage.success(`蹲到 ${data.created} 条热点！`);
+    else ElMessage.info("这波没有蹲到够具体的热点，过几天再来试试");
     await load();
   } finally {
     capturing.value = false;
@@ -197,7 +209,7 @@ async function extract() {
   extracting.value = true;
   try {
     await calendarApi.extract(rawText.value);
-    ElMessage.success("已加入日历");
+    ElMessage.success("排进日历啦");
     rawText.value = "";
     await load();
   } finally {
@@ -253,10 +265,10 @@ async function saveForm() {
     };
     if (editingId.value) {
       await calendarApi.update(editingId.value, payload);
-      ElMessage.success("已更新");
+      ElMessage.success("改好了");
     } else {
       await calendarApi.create(payload);
-      ElMessage.success("已添加");
+      ElMessage.success("记上了");
     }
     showForm.value = false;
     await load();
@@ -266,9 +278,9 @@ async function saveForm() {
 }
 
 async function remove(item: CalendarEvent) {
-  await ElMessageBox.confirm(`删除「${item.title}」？`, "删除热点", { type: "warning" });
+  await ElMessageBox.confirm(`真的要把「${item.title}」删掉吗？`, "删除热点", { type: "warning" });
   await calendarApi.remove(item.id);
-  ElMessage.success("已删除");
+  ElMessage.success("删掉了");
   await load();
 }
 
@@ -338,5 +350,49 @@ onActivated(load);
   -webkit-line-clamp: 3;
   -webkit-box-orient: vertical;
   overflow: hidden;
+}
+
+.cal-head {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+/* 手机：日历紧凑化，事件标题变圆点 */
+@media (max-width: 600px) {
+  .cell {
+    min-height: 44px;
+    padding: 2px;
+  }
+  .cell .num {
+    font-size: 12px;
+  }
+  .cell .dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--accent);
+    margin: 2px auto 0;
+    font-size: 0;
+    padding: 0;
+    overflow: visible;
+    white-space: normal;
+    text-overflow: unset;
+  }
+  .cell em {
+    font-size: 10px;
+  }
+  .el-calendar :deep(.el-calendar__header) {
+    padding: 8px 6px;
+  }
+  .el-calendar :deep(.el-calendar-table td) {
+    padding: 0;
+  }
+  .event-top {
+    flex-wrap: wrap;
+  }
 }
 </style>
