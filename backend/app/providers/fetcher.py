@@ -1,4 +1,5 @@
 import ipaddress
+import re
 import socket
 import time
 from dataclasses import dataclass
@@ -22,6 +23,8 @@ _TRACKING_PARAMS = {
     "referrer", "referer", "pf", "seid", "request_id", "creative_id",
     "linked_creative_id", "caid", "resource_id", "source_id", "pvid",
     "session_id", "sid", "trace", "click_id", "cvid",
+    "adtype", "image_material_id", "title_material_id", "title_encode",
+    "duid", "os", "buvid", "idfa", "android_id",
 }
 
 
@@ -43,8 +46,25 @@ def clean_url(url: str) -> str:
 
 USER_AGENT = (
     "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 "
-    "(KHTML, like Gecko) Chrome/126.0 Safari/537.36 BStarDirectorDemo/0.1"
+    "(KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36"
 )
+
+BROWSER_HEADERS = {
+    "User-Agent": USER_AGENT,
+    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
+    "Accept-Language": "zh-CN,zh;q=0.9,en;q=0.8",
+    "Accept-Encoding": "gzip, deflate",
+    "Cache-Control": "no-cache",
+    "Pragma": "no-cache",
+    "Sec-Fetch-Dest": "document",
+    "Sec-Fetch-Mode": "navigate",
+    "Sec-Fetch-Site": "none",
+    "Sec-Fetch-User": "?1",
+    "Upgrade-Insecure-Requests": "1",
+}
+
+_BILIBILI_VIDEO_RE = re.compile(r"/video/(BV[0-9A-Za-z]+)")
+_BILIBILI_AID_RE = re.compile(r"/video/av(\d+)")
 
 
 class FetchError(ValueError):
@@ -110,15 +130,101 @@ def _extract_text(soup: BeautifulSoup) -> tuple[str, str]:
     return title, text
 
 
+def _try_bilibili_api(url: str) -> FetchResult | None:
+    """B 站视频/番剧走官方 JSON API，规避数据中心 IP 抓 HTML 被风控返回 412。"""
+    host = (urlsplit(url).hostname or "").lower()
+    if host not in {"bilibili.com", "www.bilibili.com", "m.bilibili.com", "b23.tv"}:
+        return None
+
+    path = urlsplit(url).path
+    bvid = aid = None
+    m = _BILIBILI_VIDEO_RE.search(path)
+    if m:
+        bvid = m.group(1)
+    else:
+        m = _BILIBILI_AID_RE.search(path)
+        if m:
+            aid = m.group(1)
+
+    # b23.tv 短链先解出真实地址
+    if not bvid and not aid and host == "b23.tv":
+        try:
+            with httpx.Client(headers=BROWSER_HEADERS, follow_redirects=True, timeout=TIMEOUT) as c:
+                r = c.head(url)
+                m = _BILIBILI_VIDEO_RE.search(r.url.path)
+                if m:
+                    bvid = m.group(1)
+                else:
+                    m = _BILIBILI_AID_RE.search(r.url.path)
+                    if m:
+                        aid = m.group(1)
+        except httpx.HTTPError:
+            return None
+
+    if not bvid and not aid:
+        return None
+
+    params = {"bvid": bvid} if bvid else {"aid": aid}
+    try:
+        resp = httpx.get(
+            "https://api.bilibili.com/x/web-interface/view",
+            params=params,
+            headers=BROWSER_HEADERS,
+            timeout=TIMEOUT,
+        )
+    except httpx.HTTPError:
+        return None
+    if resp.status_code != 200:
+        return None
+    try:
+        data = resp.json()
+    except ValueError:
+        return None
+    if data.get("code") != 0 or not data.get("data"):
+        return None
+
+    d = data["data"]
+    title = str(d.get("title") or "").strip()
+    owner = str((d.get("owner") or {}).get("name") or "").strip()
+    desc = str(d.get("desc") or "").strip()
+    stat = d.get("stat") or {}
+    meta = []
+    for label, key in (("播放", "view"), ("弹幕", "danmaku"), ("点赞", "like"), ("投币", "coin")):
+        if stat.get(key):
+            meta.append(f"{label} {stat[key]}")
+    lines = [title]
+    if owner:
+        lines.append(f"UP主：{owner}")
+    if desc:
+        lines.append(desc)
+    if meta:
+        lines.append(" / ".join(meta))
+    text = "\n".join(line for line in lines if line)
+    if not text:
+        return None
+    truncated = len(text) > MAX_TEXT_CHARS
+    return FetchResult(
+        url=clean_url(url),
+        title=title or "bilibili",
+        site_name="bilibili",
+        text=text[:MAX_TEXT_CHARS],
+        truncated=truncated,
+    )
+
+
 def fetch_webpage(url: str) -> FetchResult:
     url = url.strip()
+    # B 站视频优先走官方 JSON API，规避风控
+    bili = _try_bilibili_api(url)
+    if bili is not None:
+        return bili
     current = url
     deadline = time.monotonic() + TOTAL_DEADLINE
     body = b""
     with httpx.Client(
         follow_redirects=False,
         timeout=TIMEOUT,
-        headers={"User-Agent": USER_AGENT, "Accept-Language": "zh-CN,zh;q=0.9"},
+        headers=BROWSER_HEADERS,
     ) as client:
         response = None
         for _ in range(MAX_REDIRECTS + 1):
