@@ -3,12 +3,12 @@
     <SparkleField />
     <section class="hero">
       <div class="brand-row">
-        <span class="logo">B</span>
-        <span>B-Star 编导台</span>
+        <span class="logo">I</span>
+        <span>IdeaWeave</span>
       </div>
-      <h1>灵感别烂在收藏夹里<br />拉出来变成能拍的脚本</h1>
+      <h1>把收藏夹里的灵感<br />织成一期能拍的脚本</h1>
       <p class="lead">
-        小团队 UP 主的前期创作基地～把爆款丢进来、选好人设，AI 编导娘陪你从选题卷到脚本。
+        小团队 UP 主的前期创作工作台。丢进爆款、选好人设，从选题织到分镜脚本。
       </p>
       <div class="hero-art">
         <img class="hero-img" :src="hero" alt="编导娘" />

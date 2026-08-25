@@ -83,11 +83,13 @@ import { useRouter } from "vue-router";
 import { ElMessage } from "element-plus";
 import { inspirationApi } from "../api";
 import { SAMPLE_VIRAL, type Topic } from "../types";
+import { useWorkspaceStore } from "../stores/workspace";
 import AiProgress from "../components/AiProgress.vue";
 
 defineOptions({ name: "InspirationView" });
 
 const router = useRouter();
+const workspace = useWorkspaceStore();
 const mode = ref<"text" | "link">("text");
 const url = ref("");
 const rawText = ref("");
@@ -114,6 +116,7 @@ async function extractByText() {
   try {
     const { data } = await inspirationApi.extract({ raw_text: rawText.value, source_note: sourceNote.value });
     result.value = data;
+    void workspace.refreshTopics();
     ElMessage.success("收进选题库啦！");
   } finally {
     loading.value = false;
@@ -127,6 +130,7 @@ async function extractByLink() {
   try {
     const { data } = await inspirationApi.extract({ url: link, source_note: sourceNote.value });
     result.value = data;
+    void workspace.refreshTopics();
     ElMessage.success("原文到手，已收进选题库！");
   } finally {
     loading.value = false;

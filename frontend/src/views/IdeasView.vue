@@ -45,12 +45,14 @@ import { useRoute, useRouter } from "vue-router";
 import { ElMessage } from "element-plus";
 import { ideaApi, topicApi } from "../api";
 import type { IdeaSession, Topic } from "../types";
+import { useWorkspaceStore } from "../stores/workspace";
 import AiProgress from "../components/AiProgress.vue";
 
 defineOptions({ name: "IdeasView" });
 
 const route = useRoute();
 const router = useRouter();
+const workspace = useWorkspaceStore();
 const topics = ref<Topic[]>([]);
 const topicId = ref<number | undefined>();
 const vague = ref("");
@@ -62,9 +64,25 @@ function applyQuery() {
   if (route.query.hint) vague.value = String(route.query.hint);
 }
 
-async function loadTopics() {
+async function loadTopics(opts?: { silent?: boolean }) {
+  if (opts?.silent && topics.value.length) {
+    void topicApi.list().then(({ data }) => {
+      topics.value = data;
+      workspace.topics = data;
+    });
+    return;
+  }
+  if (workspace.topics.length && !topics.value.length) {
+    topics.value = workspace.topics;
+    void topicApi.list().then(({ data }) => {
+      topics.value = data;
+      workspace.topics = data;
+    });
+    return;
+  }
   const { data } = await topicApi.list();
   topics.value = data;
+  workspace.topics = data;
 }
 
 onMounted(async () => {
@@ -72,9 +90,14 @@ onMounted(async () => {
   applyQuery();
 });
 
-onActivated(async () => {
+let skipActivate = true;
+onActivated(() => {
   applyQuery();
-  await loadTopics();
+  if (skipActivate) {
+    skipActivate = false;
+    return;
+  }
+  void loadTopics({ silent: true });
 });
 
 async function diverge() {

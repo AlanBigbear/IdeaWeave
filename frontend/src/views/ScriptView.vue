@@ -88,7 +88,14 @@ function applyQuery() {
 }
 
 onMounted(applyQuery);
-onActivated(applyQuery);
+let skipActivate = true;
+onActivated(() => {
+  if (skipActivate) {
+    skipActivate = false;
+    return;
+  }
+  applyQuery();
+});
 
 function fillSample() {
   outline.value = SAMPLE_OUTLINE;

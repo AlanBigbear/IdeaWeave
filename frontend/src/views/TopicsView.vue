@@ -225,6 +225,7 @@ import { computed, onActivated, onBeforeUnmount, onMounted, reactive, ref } from
 import { useRouter } from "vue-router";
 import { ElMessage } from "element-plus";
 import { topicApi } from "../api";
+import { useWorkspaceStore } from "../stores/workspace";
 import type { Topic } from "../types";
 
 defineOptions({ name: "TopicsView" });
@@ -250,6 +251,7 @@ const PRIORITY_LABELS: Record<string, string> = { high: "高", mid: "中", low: 
 const PRIORITY_TYPES: Record<string, TagType> = { high: "danger", mid: "warning", low: "info" };
 
 const router = useRouter();
+const workspace = useWorkspaceStore();
 const topics = ref<Topic[]>([]);
 const feasibility = ref("");
 const statusFilter = ref("");
@@ -290,8 +292,9 @@ function splitList(value: string) {
     .filter(Boolean);
 }
 
-async function load() {
-  loading.value = true;
+async function load(opts?: { silent?: boolean }) {
+  const silent = Boolean(opts?.silent);
+  if (!silent) loading.value = true;
   try {
     const { data } = await topicApi.list({
       feasibility: feasibility.value || undefined,
@@ -302,6 +305,9 @@ async function load() {
     });
     topics.value = data;
     data.forEach((t) => t.tags?.forEach((tag) => knownTags.value.add(tag)));
+    if (!feasibility.value && !q.value && !statusFilter.value && !priorityFilter.value && !tagFilter.value) {
+      workspace.topics = data;
+    }
   } finally {
     loading.value = false;
   }
@@ -398,9 +404,23 @@ function goIdea(row: Topic) {
   router.push({ path: "/ideas", query: { topicId: String(row.id), hint: row.title } });
 }
 
-onMounted(load);
-// keep-alive 缓存：每次切回本页都重新拉最新数据（如刚从灵感采集入库的新选题）
-onActivated(load);
+onMounted(() => {
+  if (workspace.topics.length) {
+    topics.value = workspace.topics;
+    workspace.topics.forEach((t) => t.tags?.forEach((tag) => knownTags.value.add(tag)));
+    void load({ silent: true });
+  } else {
+    void load();
+  }
+});
+let skipActivate = true;
+onActivated(() => {
+  if (skipActivate) {
+    skipActivate = false;
+    return;
+  }
+  void load({ silent: topics.value.length > 0 });
+});
 </script>
 
 <style scoped>
