@@ -123,11 +123,13 @@ import { useRouter } from "vue-router";
 import { ElMessage, ElMessageBox } from "element-plus";
 import { calendarApi } from "../api";
 import { SAMPLE_HOTSPOT, type CalendarEvent } from "../types";
+import { useWorkspaceStore } from "../stores/workspace";
 import AiProgress from "../components/AiProgress.vue";
 
 defineOptions({ name: "CalendarView" });
 
 const router = useRouter();
+const workspace = useWorkspaceStore();
 const events = ref<CalendarEvent[]>([]);
 const calDate = ref(new Date());
 const capturing = ref(false);
@@ -183,9 +185,17 @@ function pickDay(day: string) {
   calDate.value = new Date(`${day}T00:00:00`);
 }
 
-async function load() {
+async function load(opts?: { silent?: boolean }) {
+  if (opts?.silent && events.value.length) {
+    void calendarApi.list().then(({ data }) => {
+      events.value = data;
+      workspace.events = data;
+    });
+    return;
+  }
   const { data } = await calendarApi.list();
   events.value = data;
+  workspace.events = data;
 }
 
 async function capture() {
@@ -291,8 +301,22 @@ function goIdea(item: CalendarEvent) {
   });
 }
 
-onMounted(load);
-onActivated(load);
+onMounted(() => {
+  if (workspace.events.length) {
+    events.value = workspace.events;
+    void load({ silent: true });
+  } else {
+    void load();
+  }
+});
+let skipActivate = true;
+onActivated(() => {
+  if (skipActivate) {
+    skipActivate = false;
+    return;
+  }
+  void load({ silent: events.value.length > 0 });
+});
 </script>
 
 <style scoped>

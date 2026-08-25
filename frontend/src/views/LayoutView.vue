@@ -2,10 +2,10 @@
   <div class="studio">
     <aside class="rail">
       <div class="brand">
-        <span class="logo">B</span>
+        <span class="logo">I</span>
         <div>
-          <b>B-Star</b>
-          <small>编导娘待命中</small>
+          <b>IdeaWeave</b>
+          <small>把灵感织成脚本</small>
         </div>
       </div>
       <nav class="side-nav">
@@ -14,7 +14,8 @@
           :key="item.path"
           class="side-tab"
           :class="{ on: route.path === item.path }"
-          @click="router.push(item.path)"
+          @mouseenter="warm(item.path)"
+          @click="go(item.path)"
         >
           <span class="ico">
             <span class="face">{{ item.emoji }}</span>
@@ -46,7 +47,7 @@
         <img class="sticker s1" :src="stickers" alt="" />
         <div class="stage-inner">
           <router-view v-slot="{ Component }">
-            <keep-alive>
+            <keep-alive :include="cachedViews">
               <component :is="Component" />
             </keep-alive>
           </router-view>
@@ -61,7 +62,7 @@
         :key="item.path"
         class="bottom-tab"
         :class="{ on: route.path === item.path }"
-        @click="router.push(item.path)"
+        @click="go(item.path)"
       >
         <span class="face">{{ item.emoji }}</span>
         <i>{{ item.label }}</i>
@@ -75,14 +76,24 @@ import { computed, onMounted, ref } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { personaApi } from "../api";
 import { useAuthStore } from "../stores/auth";
+import { useWorkspaceStore } from "../stores/workspace";
 import SparkleField from "../components/SparkleField.vue";
 import stickers from "../assets/kawaii-stickers.png";
 
 const route = useRoute();
 const router = useRouter();
 const auth = useAuthStore();
+const workspace = useWorkspaceStore();
 const personaName = ref("人设待捏");
 const personaMeta = ref("先去捏一个吧～");
+const cachedViews = [
+  "InspirationView",
+  "TopicsView",
+  "IdeasView",
+  "ScriptView",
+  "CalendarView",
+  "SettingsView",
+];
 
 const navs = [
   { path: "/inspiration", label: "灵感采集", hint: "丢爆款，薅爆点", emoji: "✨" },
@@ -95,7 +106,17 @@ const navs = [
 
 const activeId = computed(() => auth.user?.active_persona_id);
 
+function go(path: string) {
+  if (route.path !== path) router.push(path);
+}
+
+function warm(path: string) {
+  if (path === "/topics") void workspace.refreshTopics();
+  if (path === "/calendar") void workspace.refreshEvents();
+}
+
 onMounted(async () => {
+  workspace.prefetch();
   const { data } = await personaApi.list();
   const current = data.find((item) => item.id === activeId.value);
   if (current) {

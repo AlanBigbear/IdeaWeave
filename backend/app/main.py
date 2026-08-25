@@ -60,7 +60,7 @@ _API_PREFIXES = ("api/", "docs", "redoc", "openapi.json")
 if _DIST.is_dir():
     app.mount("/assets", HashedAssetStaticFiles(directory=_DIST / "assets"), name="static-assets")
 
-    @app.get("/{full_path:path}")
+    @app.api_route("/{full_path:path}", methods=["GET", "HEAD"])
     def spa_fallback(full_path: str):
         if full_path.startswith(_API_PREFIXES):
             return JSONResponse(status_code=404, content={"detail": "Not Found"})
