@@ -1,0 +1,30 @@
+# 服务器生产镜像：前端构建 + FastAPI 托管 dist + API（单端口 8000）
+# 用法见 docker-compose.prod.yml（构建上下文为项目根目录）
+
+# ---- 阶段 1：构建前端 ----
+FROM node:22-alpine AS frontend-build
+WORKDIR /app
+COPY frontend/package.json frontend/package-lock.json ./
+# 若 lock 与 package.json 不同步导致 npm ci 报错，可改回 npm install
+RUN npm ci
+COPY frontend/ ./
+RUN npm run build
+
+# ---- 阶段 2：后端运行时 ----
+FROM python:3.12-slim
+WORKDIR /app
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    DATA_DIR=/app/data
+
+COPY backend/requirements.txt ./
+RUN pip install --no-cache-dir -r requirements.txt
+
+COPY backend/app ./app
+COPY --from=frontend-build /app/dist ./frontend/dist
+
+# 空 .env 占位，避免 pydantic-settings 找不到 env_file 报错；真实配置走环境变量
+RUN touch /app/.env && mkdir -p /app/data/exports
+
+EXPOSE 8000
+CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]

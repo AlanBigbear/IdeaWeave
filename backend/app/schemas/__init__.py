@@ -219,6 +219,12 @@ class IdeaItem(BaseModel):
     why_different: str
 
 
+class IdeaCardOut(IdeaItem):
+    session_id: int
+    index: int
+    created_at: datetime
+
+
 class DivergeIn(BaseModel):
     vague_idea: str = Field(min_length=4, max_length=100000)
     topic_id: int | None = None
@@ -235,11 +241,17 @@ class IdeaSessionOut(BaseModel):
     vague_idea: str
     ideas: list[IdeaItem]
     selected_index: int | None
+    saved_indexes: list[int] = Field(default_factory=list)
     created_at: datetime
 
 
 class SelectIdeaIn(BaseModel):
     index: int = Field(ge=0, le=2)
+
+
+class SaveIdeaIn(BaseModel):
+    index: int = Field(ge=0, le=2)
+    saved: bool = True
 
 
 class ShotOut(BaseModel):

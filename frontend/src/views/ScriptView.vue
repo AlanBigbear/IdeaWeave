@@ -18,8 +18,7 @@
               <el-button type="primary" :loading="loading" @click="expand">开写！</el-button>
               <el-button @click="fillSample">塞个示例</el-button>
             </el-space>
-            <AiProgress :active="loading" variant="extract" />
-            <p v-if="status && !loading" class="muted">{{ status }}</p>
+            <AiStream :active="loading" :thinking="thinking" :content="content" emoji="📝" />
           </el-form>
         </el-card>
       </el-col>
@@ -59,6 +58,26 @@
         </template>
       </el-col>
     </el-row>
+
+    <section v-if="scripts.length" class="saved-scripts">
+      <div class="saved-head">
+        <h3>📚 我的脚本（{{ scripts.length }}）</h3>
+        <span class="muted">写好的脚本会自动存到这里，点一下就能回看～</span>
+      </div>
+      <div class="script-list">
+        <button
+          v-for="s in scripts"
+          :key="s.id"
+          class="script-item"
+          :class="{ on: record?.id === s.id }"
+          type="button"
+          @click="openScript(s)"
+        >
+          <b>{{ s.script.title }}</b>
+          <span>{{ formatTime(s.created_at) }}</span>
+        </button>
+      </div>
+    </section>
   </div>
 </template>
 
@@ -66,9 +85,9 @@
 import { onActivated, onMounted, ref } from "vue";
 import { useRoute } from "vue-router";
 import { ElMessage } from "element-plus";
-import { expandScriptStream } from "../api";
+import { expandScriptStream, scriptApi } from "../api";
 import { SAMPLE_OUTLINE, SAMPLE_SHOTLIST, type ScriptRecord } from "../types";
-import AiProgress from "../components/AiProgress.vue";
+import AiStream from "../components/AiStream.vue";
 
 defineOptions({ name: "ScriptView" });
 
@@ -76,10 +95,12 @@ const route = useRoute();
 const outline = ref("");
 const shotList = ref("");
 const loading = ref(false);
-const status = ref("");
+const thinking = ref("");
+const content = ref("");
 const record = ref<ScriptRecord | null>(null);
 const ideaSessionId = ref<number | null>(null);
 const topicId = ref<number | null>(null);
+const scripts = ref<ScriptRecord[]>([]);
 
 function applyQuery() {
   if (route.query.outline) outline.value = String(route.query.outline);
@@ -87,7 +108,27 @@ function applyQuery() {
   if (route.query.topicId) topicId.value = Number(route.query.topicId);
 }
 
-onMounted(applyQuery);
+async function refreshScripts() {
+  const { data } = await scriptApi.list();
+  scripts.value = data;
+}
+
+function formatTime(iso: string) {
+  if (!iso) return "";
+  const d = new Date(iso);
+  const p = (n: number) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`;
+}
+
+function openScript(s: ScriptRecord) {
+  record.value = s;
+  ElMessage.success("已加载脚本～");
+}
+
+onMounted(() => {
+  applyQuery();
+  void refreshScripts();
+});
 let skipActivate = true;
 onActivated(() => {
   if (skipActivate) {
@@ -95,6 +136,7 @@ onActivated(() => {
     return;
   }
   applyQuery();
+  void refreshScripts();
 });
 
 function fillSample() {
@@ -108,7 +150,8 @@ async function expand() {
     return;
   }
   loading.value = true;
-  status.value = "正在唤醒编导娘…";
+  thinking.value = "";
+  content.value = "";
   try {
     record.value = await expandScriptStream(
       {
@@ -117,12 +160,13 @@ async function expand() {
         idea_session_id: ideaSessionId.value,
         topic_id: topicId.value,
       },
-      (msg) => {
-        status.value = msg;
+      (kind, text) => {
+        if (kind === "thinking") thinking.value += text;
+        else content.value += text;
       },
     );
-    status.value = "";
-    ElMessage.success("脚本出炉！");
+    await refreshScripts();
+    ElMessage.success("脚本出炉，已存进脚本库～");
   } catch (err) {
     ElMessage.error(err instanceof Error ? err.message : "生成失败");
   } finally {
@@ -134,5 +178,64 @@ async function expand() {
 <style scoped>
 .muted {
   color: #667085;
+}
+
+.saved-scripts {
+  margin-top: 24px;
+}
+
+.saved-head {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  margin-bottom: 12px;
+  flex-wrap: wrap;
+}
+
+.saved-head h3 {
+  margin: 0;
+  font-size: 17px;
+}
+
+.script-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(240px, 100%), 1fr));
+  gap: 10px;
+}
+
+.script-item {
+  appearance: none;
+  border: 1px solid var(--line);
+  background: #fff;
+  border-radius: 14px;
+  padding: 12px 14px;
+  cursor: pointer;
+  text-align: left;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  transition: 0.18s ease;
+}
+
+.script-item:hover {
+  border-color: #ffb0cb;
+  transform: translateY(-2px);
+  box-shadow: var(--shadow);
+}
+
+.script-item.on {
+  border-color: var(--accent);
+  background: linear-gradient(180deg, #fff 0%, #fff0f5 100%);
+}
+
+.script-item b {
+  font-size: 14px;
+  color: var(--ink);
+  line-height: 1.4;
+}
+
+.script-item span {
+  font-size: 12px;
+  color: var(--muted);
 }
 </style>

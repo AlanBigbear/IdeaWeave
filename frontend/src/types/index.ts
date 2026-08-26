@@ -113,12 +113,19 @@ export interface IdeaItem {
   why_different: string;
 }
 
+export interface IdeaCard extends IdeaItem {
+  session_id: number;
+  index: number;
+  created_at: string;
+}
+
 export interface IdeaSession {
   id: number;
   topic_id: number | null;
   vague_idea: string;
   ideas: IdeaItem[];
   selected_index: number | null;
+  saved_indexes: number[];
   created_at: string;
 }
 

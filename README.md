@@ -32,7 +32,7 @@ npm install
 npm run dev
 ```
 
-打开 http://localhost:5173 → 注册登录 → 完善人设。默认已接 DeepSeek `deepseek-v4-flash`（Key 可写在 `backend/.env` 的 `DEFAULT_LLM_API_KEY`，用户覆盖存在 MySQL `user_settings`）。
+打开 http://localhost:5173 → 注册登录 → 完善人设。默认已接 DeepSeek `deepseek-v4-pro`（Key 可写在 `backend/.env` 的 `DEFAULT_LLM_API_KEY`，用户覆盖存在 MySQL `user_settings`）。
 
 数据默认写入 MySQL（`DATABASE_URL`）。未配置时回退本地 `backend/data/bstar.db`。
 

@@ -1,4 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException
+from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 
 from app.core.database import SessionLocal, get_db
@@ -14,6 +15,9 @@ from app.schemas import (
 )
 from app.services import jobs as jobs_service
 from app.services import persona as persona_service
+from app.services.streaming import sse_token_stream
+
+router = APIRouter(prefix="/personas", tags=["personas"])
 
 router = APIRouter(prefix="/personas", tags=["personas"])
 
@@ -81,6 +85,23 @@ def generate_persona_skill(
     db: Session = Depends(get_db),
 ):
     return persona_service.generate_skill(db, user, persona_id)
+
+
+@router.post("/{persona_id}/skill/stream")
+def generate_persona_skill_stream(
+    persona_id: int,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    def run(session: Session, on_delta) -> PersonaOut:
+        owner = session.get(User, user.id)
+        persona = persona_service.generate_skill(session, owner, persona_id, on_delta)
+        return PersonaOut.model_validate(persona)
+
+    return StreamingResponse(
+        sse_token_stream(run, serialize=lambda r: r.model_dump_json()),
+        media_type="text/event-stream",
+    )
 
 
 @router.post("/{persona_id}/skill/async")

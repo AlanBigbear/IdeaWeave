@@ -23,7 +23,9 @@ def dumps(data) -> str:
 
 
 def loads(text: str, default):
+    if not text:
+        return default
     try:
         return json.loads(text)
-    except json.JSONDecodeError:
+    except (json.JSONDecodeError, TypeError):
         return default

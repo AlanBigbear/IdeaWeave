@@ -18,7 +18,7 @@
           <el-button @click="rawText = SAMPLE_HOTSPOT">填入示例</el-button>
         </el-space>
       </div>
-      <AiProgress :active="capturing || extracting" variant="calendar" />
+      <AiProgress :active="capturing || extracting" variant="calendar" :status="status" />
     </el-card>
 
     <el-row :gutter="16" style="margin-top: 16px">
@@ -121,7 +121,7 @@
 import { computed, onActivated, onMounted, reactive, ref } from "vue";
 import { useRouter } from "vue-router";
 import { ElMessage, ElMessageBox } from "element-plus";
-import { calendarApi } from "../api";
+import { calendarApi, calendarCaptureStream, calendarExtractStream } from "../api";
 import { SAMPLE_HOTSPOT, type CalendarEvent } from "../types";
 import { useWorkspaceStore } from "../stores/workspace";
 import AiProgress from "../components/AiProgress.vue";
@@ -135,6 +135,7 @@ const calDate = ref(new Date());
 const capturing = ref(false);
 const extracting = ref(false);
 const saving = ref(false);
+const status = ref("");
 const showPaste = ref(false);
 const showForm = ref(false);
 const editingId = ref<number | null>(null);
@@ -200,12 +201,18 @@ async function load(opts?: { silent?: boolean }) {
 
 async function capture() {
   capturing.value = true;
+  status.value = "编导娘探出头去蹲未来 30 天热点…";
   try {
-    const { data } = await calendarApi.capture();
+    const data = await calendarCaptureStream((msg) => {
+      status.value = msg;
+    });
+    status.value = "";
     if (data.warning) ElMessage.warning(data.warning);
     else if (data.created) ElMessage.success(`蹲到 ${data.created} 条热点！`);
     else ElMessage.info("这波没有蹲到够具体的热点，过几天再来试试");
     await load();
+  } catch (err) {
+    ElMessage.error(err instanceof Error ? err.message : "捕捉失败");
   } finally {
     capturing.value = false;
   }
@@ -217,11 +224,17 @@ async function extract() {
     return;
   }
   extracting.value = true;
+  status.value = "编导娘探出头去读这段热点…";
   try {
-    await calendarApi.extract(rawText.value);
+    await calendarExtractStream(rawText.value, (msg) => {
+      status.value = msg;
+    });
+    status.value = "";
     ElMessage.success("排进日历啦");
     rawText.value = "";
     await load();
+  } catch (err) {
+    ElMessage.error(err instanceof Error ? err.message : "提取失败");
   } finally {
     extracting.value = false;
   }

@@ -9,11 +9,7 @@
         先去「设置 → 大模型」把 Base URL、模型名和 API Key 配好再来～也可以先跳过，之后在设置页生成。
       </el-alert>
 
-      <div v-if="generating" class="generating-box">
-        <div class="generating-face">🪄</div>
-        <p class="generating-main">{{ hint }}</p>
-        <p class="generating-sub">已用 {{ elapsed }} 秒 · 后台生成中，可以先去别的页面逛，好了会自动保存</p>
-      </div>
+      <AiStream v-if="generating" :active="generating" :thinking="thinking" :content="content" emoji="🪄" />
       <template v-else>
         <el-button type="primary" round @click="generate">AI 注入灵魂（深度定制）</el-button>
         <el-button round @click="openTemplates">套用编导模板</el-button>
@@ -34,9 +30,7 @@
           <el-button round :loading="generating" @click="generate">AI 重新生成</el-button>
           <el-button round @click="openTemplates">换个编导模板</el-button>
         </div>
-        <div v-if="generating" class="generating-inline">
-          ⏳ {{ hint }} 已用 {{ elapsed }} 秒 · 可以先去别的页面逛，好了会自动保存
-        </div>
+        <AiStream v-if="generating" :active="generating" :thinking="thinking" :content="content" emoji="🪄" />
       </div>
 
       <div v-if="brief" class="brief">
@@ -102,27 +96,21 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onUnmounted, ref, watch } from "vue";
+import { computed, ref, watch } from "vue";
 import { ElMessage, ElMessageBox } from "element-plus";
-import { personaApi } from "../api";
+import { generateSkillStream, personaApi } from "../api";
+import AiStream from "./AiStream.vue";
 import type { Persona, SkillTemplate } from "../types";
 
 const props = defineProps<{ persona: Persona }>();
 const emit = defineEmits<{ (e: "updated", persona: Persona): void }>();
 
-const HINTS = [
-  "编导娘正在翻人设档案…",
-  "正在提炼专属钩子公式…",
-  "正在排脚本骨架…",
-  "正在写语言风格规则…",
-  "最后润色，快好了…",
-];
-
 const generating = ref(false);
 const saving = ref(false);
 const presetting = ref(false);
 const llmMissing = ref(false);
-const elapsed = ref(0);
+const thinking = ref("");
+const content = ref("");
 const skillPrompt = ref(props.persona.skill_prompt);
 const showTemplates = ref(false);
 const templates = ref<SkillTemplate[]>([]);
@@ -150,20 +138,6 @@ const brief = computed(() => props.persona.skill_brief);
 const dirty = computed(
   () => skillPrompt.value.trim() !== props.persona.skill_prompt.trim(),
 );
-const hint = computed(() => HINTS[Math.min(Math.floor(elapsed.value / 12), HINTS.length - 1)]);
-
-let pollTimer: ReturnType<typeof setInterval> | undefined;
-let tickTimer: ReturnType<typeof setInterval> | undefined;
-
-function stopTimers() {
-  if (pollTimer) clearInterval(pollTimer);
-  if (tickTimer) clearInterval(tickTimer);
-  pollTimer = undefined;
-  tickTimer = undefined;
-}
-
-onUnmounted(stopTimers);
-
 watch(
   () => props.persona.id,
   () => {
@@ -189,32 +163,15 @@ async function generate() {
   }
   generating.value = true;
   llmMissing.value = false;
-  elapsed.value = 0;
-  tickTimer = setInterval(() => {
-    elapsed.value += 1;
-  }, 1000);
+  thinking.value = "";
+  content.value = "";
   try {
-    const { data } = await personaApi.generateSkillAsync(props.persona.id);
-    const jobId = data.job_id;
-    await new Promise<void>((resolve, reject) => {
-      pollTimer = setInterval(async () => {
-        try {
-          const { data: job } = await personaApi.skillJob(jobId);
-          if (job.status === "done" && job.persona) {
-            stopTimers();
-            applyPersona(job.persona);
-            ElMessage.success("灵魂注入完成！专属 Skill 上线");
-            resolve();
-          } else if (job.status === "error") {
-            stopTimers();
-            reject(new Error(job.error || "生成失败"));
-          }
-        } catch (err) {
-          stopTimers();
-          reject(err);
-        }
-      }, 2500);
+    const data = await generateSkillStream(props.persona.id, (kind, text) => {
+      if (kind === "thinking") thinking.value += text;
+      else content.value += text;
     });
+    applyPersona(data);
+    ElMessage.success("灵魂注入完成！专属 Skill 上线");
   } catch (error) {
     const message = error instanceof Error ? error.message : "";
     if (message.includes("大模型")) {
@@ -223,7 +180,6 @@ async function generate() {
       ElMessage.error(message ? `注入灵魂失败：${message}` : "注入灵魂失败，稍后再试");
     }
   } finally {
-    stopTimers();
     generating.value = false;
   }
 }

@@ -126,6 +126,9 @@ def migrate_schema() -> None:
         "user_settings": {
             "llm_api_key": "TEXT",
         },
+        "idea_sessions": {
+            "saved_json": "TEXT",
+        },
     }
     inspector = inspect(engine)
     tables = set(inspector.get_table_names())
@@ -149,7 +152,9 @@ def migrate_schema() -> None:
             conn.execute(
                 text(
                     "UPDATE user_settings SET llm_model = :model "
-                    "WHERE llm_model IN ('deepseek-chat', 'DeepSeek-V4-Flash-0731', '')"
+                    "WHERE llm_model IN ("
+                    "'deepseek-chat', 'DeepSeek-V4-Flash-0731', 'deepseek-v4-flash', "
+                    "'deepseek-reasoner', '')"
                 ),
                 {"model": settings.default_llm_model},
             )

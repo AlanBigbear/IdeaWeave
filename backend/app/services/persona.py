@@ -4,7 +4,7 @@ from fastapi import HTTPException
 from sqlalchemy.orm import Session
 
 from app.chains.llm import build_llm
-from app.chains.pipelines import generate_persona_skill_chain, invoke_or_502
+from app.chains.pipelines import generate_persona_skill_chain, run_chain
 from app.models import Persona, User
 from app.prompts.personas import PERSONA_OPTIONS, PERSONA_TEMPLATES, get_template
 from app.schemas import PersonaIn
@@ -35,11 +35,11 @@ def _dump_brief(preset: dict) -> str:
     return json.dumps(preset, ensure_ascii=False)
 
 
-def generate_skill(db: Session, user: User, persona_id: int) -> Persona:
+def generate_skill(db: Session, user: User, persona_id: int, on_delta=None) -> Persona:
     persona = get_owned_persona(db, user, persona_id)
     llm = build_llm(db, user, temperature=0.7, max_tokens=1200)
-    chain = generate_persona_skill_chain(llm, persona)
-    skill = invoke_or_502(chain, {})
+    raw, parser = generate_persona_skill_chain(llm, persona)
+    skill = run_chain(raw, parser, {}, on_delta)
     persona.skill_prompt = skill.system_prompt.strip()
     persona.skill_brief_json = skill.model_dump_json()
     persona.skill_generated_at = datetime.now(timezone.utc)

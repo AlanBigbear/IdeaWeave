@@ -1,0 +1,63 @@
+# 服务器部署：MySQL（首启自动导入 dump）+ FastAPI（托管前端 dist + API）
+#
+# 用法：
+#   1. 生成数据 dump：  cd backend && .venv/bin/python3 scripts/dump_mysql.py
+#      （产物在 deploy/ideaweave_full.sql）
+#   2. 设置密钥（二选一）：
+#        a. 在当前目录建 .env 文件，写入 MYSQL_ROOT_PASSWORD / MYSQL_PASSWORD / JWT_SECRET / DEFAULT_LLM_API_KEY
+#        b. 或先 export 这些环境变量
+#   3. 启动：  docker compose -f docker-compose.prod.yml up -d --build
+#   4. 访问：  http://服务器IP:8000
+#
+# 注意：dump 只在 MySQL 数据卷「首次为空」时自动导入。
+#      想强制重灌：  docker compose -f docker-compose.prod.yml down -v
+
+services:
+  db:
+    image: mysql:8.0
+    container_name: ideaweave-db
+    restart: unless-stopped
+    command:
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_unicode_ci
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-please-change-root}
+      MYSQL_DATABASE: ideaweave
+      MYSQL_USER: ideaweave
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:-please-change-user}
+    volumes:
+      - db_data:/var/lib/mysql
+      # 首次初始化自动导入；文件不存在时请先跑 dump_mysql.py
+      - ./deploy/ideaweave_full.sql:/docker-entrypoint-initdb.d/01_ideaweave.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping -h 127.0.0.1 -uroot -p\"$$MYSQL_ROOT_PASSWORD\" --silent"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+      start_period: 30s
+
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile.prod
+    container_name: ideaweave-backend
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: mysql+pymysql://ideaweave:${MYSQL_PASSWORD:-please-change-user}@db:3306/ideaweave?charset=utf8mb4
+      MYSQL_FALLBACK_SQLITE: "false"
+      JWT_SECRET: ${JWT_SECRET:-please-change-this-jwt-secret-32bytes+}
+      DATA_DIR: /app/data
+      DEFAULT_LLM_BASE_URL: ${DEFAULT_LLM_BASE_URL:-https://api.deepseek.com/v1}
+      DEFAULT_LLM_MODEL: ${DEFAULT_LLM_MODEL:-deepseek-v4-flash}
+      DEFAULT_LLM_API_KEY: ${DEFAULT_LLM_API_KEY:-}
+    ports:
+      - "${BACKEND_PORT:-8000}:8000"
+    volumes:
+      - backend_data:/app/data
+
+volumes:
+  db_data:
+  backend_data:

@@ -84,4 +84,4 @@ class CalendarExtract(BaseModel):
 
 
 class CalendarCaptureBundle(BaseModel):
-    events: list[CalendarExtract] = Field(min_length=1, max_length=6)
+    events: list[CalendarExtract] = Field(min_length=1, max_length=10)

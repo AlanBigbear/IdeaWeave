@@ -28,13 +28,13 @@
       </el-col>
       <el-col :md="12">
         <el-card header="大模型">
-          <p class="muted">默认已经接好 DeepSeek（deepseek-v4-flash），想换成别的 OpenAI 兼容模型也随你～</p>
+          <p class="muted">默认已接 DeepSeek（deepseek-v4-pro），想换成别的 OpenAI 兼容模型也随你～</p>
           <el-form label-position="top">
             <el-form-item label="Base URL">
               <el-input v-model="form.llm_base_url" placeholder="https://api.deepseek.com/v1" />
             </el-form-item>
             <el-form-item label="模型名">
-              <el-input v-model="form.llm_model" placeholder="deepseek-v4-flash" />
+              <el-input v-model="form.llm_model" placeholder="deepseek-v4-pro" />
             </el-form-item>
             <el-form-item :label="keyLabel">
               <el-input v-model="form.llm_api_key" type="password" show-password placeholder="留空则不修改已保存的 Key" />
