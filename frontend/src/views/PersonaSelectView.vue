@@ -162,7 +162,7 @@ import { useAuthStore } from "../stores/auth";
 import SparkleField from "../components/SparkleField.vue";
 import PersonaSkillCard from "../components/PersonaSkillCard.vue";
 import type { OptionItem, Persona, PersonaOptions, PersonaTemplate } from "../types";
-import mascot from "../assets/mascot-director.png";
+import mascot from "../assets/mascot-director.webp";
 
 const steps = ["分区", "风格", "更新", "评论", "确认", "Skill"];
 const step = ref(0);

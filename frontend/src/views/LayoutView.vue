@@ -78,7 +78,7 @@ import { personaApi } from "../api";
 import { useAuthStore } from "../stores/auth";
 import { useWorkspaceStore } from "../stores/workspace";
 import SparkleField from "../components/SparkleField.vue";
-import stickers from "../assets/kawaii-stickers.png";
+import stickers from "../assets/kawaii-stickers.webp";
 
 const route = useRoute();
 const router = useRouter();
