@@ -48,11 +48,11 @@ import { useRouter } from "vue-router";
 import { ElMessage } from "element-plus";
 import { authApi } from "../api";
 import SparkleField from "../components/SparkleField.vue";
-import hero from "../assets/login-hero.png";
-import stickers from "../assets/kawaii-stickers.png";
+import hero from "../assets/login-hero.webp";
+import stickers from "../assets/kawaii-stickers.webp";
 import { useAuthStore } from "../stores/auth";
 
-const mascot = "/pets/calico-sit-clear.png";
+const mascot = "/pets/calico-sit-clear.webp";
 
 const router = useRouter();
 const auth = useAuthStore();

@@ -20,9 +20,9 @@ import { computed, onMounted, onUnmounted, ref, watch } from "vue";
 import { useCatStore } from "../stores/cat";
 
 const POSES = {
-  sit: "/pets/calico-sit-clear.png",
-  walk: "/pets/calico-walk-clear.png",
-  sleep: "/pets/calico-sleep-clear.png",
+  sit: "/pets/calico-sit-clear.webp",
+  walk: "/pets/calico-walk-clear.webp",
+  sleep: "/pets/calico-sleep-clear.webp",
 } as const;
 
 const cat = useCatStore();
