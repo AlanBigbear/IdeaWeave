@@ -1,8 +1,11 @@
+import json
 import logging
 from typing import get_args, get_origin
 
 from fastapi import HTTPException
 from pydantic import BaseModel
+from json_repair import repair_json
+from langchain_core.exceptions import OutputParserException
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.output_parsers import PydanticOutputParser
 from langchain_openai import ChatOpenAI
@@ -21,9 +24,10 @@ from app.prompts.personas import persona_skill_fact_sheet, persona_system_prompt
 class TolerantPydanticOutputParser(PydanticOutputParser):
     """容错版 PydanticOutputParser。
 
-    模型偶发会把「只有一个 list 字段」的 JSON 对象直接输出成裸数组，
-    例如 IdeaBundle{ideas:[...]} 被输出成 [{...}, ...]。这里自动包回该字段再校验，
-    其余情况原样抛错，不掩盖真正的格式问题。
+    1. 模型偶发把「只有一个 list 字段」的 JSON 对象直接输出成裸数组，
+       例如 IdeaBundle{ideas:[...]} 被输出成 [{...}, ...] → 自动包回该字段。
+    2. 模型偶发输出畸形 JSON（中文引号、字符串内未转义引号、尾逗号等）
+       → 用 json_repair 修复后再解析。
     """
 
     def _parse_obj(self, obj):
@@ -32,6 +36,29 @@ class TolerantPydanticOutputParser(PydanticOutputParser):
             if wrapped is not None:
                 obj = wrapped
         return super()._parse_obj(obj)
+
+    def parse_result(self, result, *, partial: bool = False):
+        try:
+            return super().parse_result(result, partial=partial)
+        except OutputParserException as orig:
+            if partial:
+                return None
+            text = self._first_text(result)
+            if not text:
+                raise orig
+            try:
+                repaired = repair_json(text)
+                return self._parse_obj(json.loads(repaired))
+            except Exception:
+                raise orig
+
+    @staticmethod
+    def _first_text(result) -> str:
+        if isinstance(result, list) and result:
+            return getattr(result[0], "text", "") or ""
+        if isinstance(result, str):
+            return result
+        return ""
 
     def _wrap_bare_list(self, data):
         list_fields = [
@@ -85,7 +112,7 @@ def _chain(llm: ChatOpenAI, persona, schema, human: str):
         [
             # format_spec 用 partial 注入：partial 值不参与模板解析，说明文字里的花括号安全
             ("system", "{system}\n{format_spec}"),
-            ("human", human),
+            ("human", human + "\n{retry_hint}"),
         ]
     ).partial(system=persona_system_prompt(persona), format_spec=compact_format_instructions(schema))
     return (prompt | llm), parser
@@ -183,7 +210,7 @@ def capture_calendar_chain(llm: ChatOpenAI, persona):
                 "4. start_date、end_date 用 YYYY-MM-DD，都要落在 {today} 至 {until} 内；\n"
                 "5. 不要重复已有标题：{existing}\n"
                 "6. 季节节点仅作提示，可参考也可跳过，不要原样照抄：{seasonal}\n\n"
-                "输出 6-10 条；别为了凑数硬编一个不存在的具体活动。",
+                "输出 6-10 条；别为了凑数硬编一个不存在的具体活动。\n{retry_hint}",
             ),
         ]
     ).partial(
@@ -219,11 +246,24 @@ def generate_persona_skill_chain(llm: ChatOpenAI, persona):
                 "（「你是为 UP 主『xx』工作的虚拟编导…」），可直接作为 system prompt 使用，"
                 "不要出现「以上」「如下」这类指代词。\n\n"
                 f"人设信息：\n{persona_skill_fact_sheet(persona)}\n\n"
-                "{format_spec}",
+                "{format_spec}\n{retry_hint}",
             ),
         ]
     ).partial(format_spec=compact_format_instructions(PersonaSkill))
     return (prompt | llm), TolerantPydanticOutputParser(pydantic_object=PersonaSkill)
+
+
+def _llm_error_detail(exc: Exception) -> str:
+    """把底层异常转成对用户友好的提示。"""
+    text = str(exc)
+    if isinstance(exc, OutputParserException):
+        return "模型返回的内容格式有点问题，已尝试自动修复但仍失败，请重试一次"
+    low = text.lower()
+    if "401" in text or "invalid api key" in low or "authentication" in low or "unauthorized" in low:
+        return "API Key 无效或已过期，请到「设置 → 大模型」检查并更新 Key"
+    if "timeout" in low or "timed out" in low or "connect" in low:
+        return "模型响应超时或连接失败，请稍后重试"
+    return f"大模型调用失败：{text}"
 
 
 def invoke_or_502(chain, payload):
@@ -233,7 +273,7 @@ def invoke_or_502(chain, payload):
         raise
     except Exception as exc:
         logging.getLogger(__name__).exception("LLM 调用失败")
-        raise HTTPException(status_code=502, detail=f"大模型调用失败：{exc}") from exc
+        raise HTTPException(status_code=502, detail=_llm_error_detail(exc)) from exc
 
 
 def _chunk_reasoning(chunk) -> str:
@@ -244,28 +284,55 @@ def _chunk_reasoning(chunk) -> str:
     return ""
 
 
+_RETRY_HINT = (
+    "注意：你上一次的输出不是合法的 JSON，无法解析。"
+    "请严格只输出一个合法 JSON 对象：字段齐全、键值用英文双引号、字符串内的引号要转义、"
+    "不要输出 Markdown 代码块或任何多余文字。"
+)
+
+
 def run_chain(raw, parser, payload, on_delta=None):
     """跑一条 prompt|llm 链。传入 on_delta 时走流式，把思考/正文增量逐段回调出去。
 
     on_delta(kind, text)：kind 为 "thinking"（推理模型的思考过程）或 "content"（正文/JSON）。
     返回解析好的 Pydantic 对象。
-    """
-    if on_delta is None:
-        return invoke_or_502(raw | parser, payload)
 
-    parts: list[str] = []
-    try:
-        for chunk in raw.stream(payload):
-            reasoning = _chunk_reasoning(chunk)
-            content = chunk.content or ""
-            if reasoning:
-                on_delta("thinking", reasoning)
-            if content:
-                on_delta("content", content)
-                parts.append(content)
-        return parser.parse("".join(parts))
-    except HTTPException:
-        raise
-    except Exception as exc:
-        logging.getLogger(__name__).exception("LLM 流式调用失败")
-        raise HTTPException(status_code=502, detail=f"大模型调用失败：{exc}") from exc
+    JSON 解析失败或只输出思考没正文时，自动重试一次（带纠正提示），尽量不把报错抛给用户。
+    """
+    base = dict(payload)
+    base.setdefault("retry_hint", "")
+
+    for attempt in range(2):
+        try:
+            if on_delta is None or attempt > 0:
+                # 非流式；重试时静默重跑，避免前端看到两次流式内容
+                return (raw | parser).invoke(base)
+
+            parts: list[str] = []
+            for chunk in raw.stream(base):
+                reasoning = _chunk_reasoning(chunk)
+                content = chunk.content or ""
+                if reasoning:
+                    on_delta("thinking", reasoning)
+                if content:
+                    on_delta("content", content)
+                    parts.append(content)
+            text = "".join(parts)
+            if not text.strip():
+                raise OutputParserException("只输出了思考过程，没有正文 JSON")
+            return parser.parse(text)
+        except HTTPException:
+            raise
+        except OutputParserException:
+            if attempt == 0:
+                base["retry_hint"] = _RETRY_HINT
+                continue
+            logging.getLogger(__name__).exception("LLM 输出解析失败（重试后仍失败）")
+            raise HTTPException(
+                status_code=502,
+                detail="模型返回的内容格式有问题，已自动重试但仍失败，请稍后再试一次",
+            )
+        except Exception as exc:
+            logging.getLogger(__name__).exception("LLM 调用失败")
+            raise HTTPException(status_code=502, detail=_llm_error_detail(exc)) from exc
+    raise HTTPException(status_code=502, detail="模型返回的内容格式有问题")

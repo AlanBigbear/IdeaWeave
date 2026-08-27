@@ -48,12 +48,14 @@
           </el-card>
           <el-card style="margin-top: 12px">
             <template #header>风险自查（发布前过一遍）</template>
-            <el-table :data="record.risks">
-              <el-table-column prop="level" label="级别" width="80" />
-              <el-table-column prop="category" label="类型" width="120" />
-              <el-table-column prop="detail" label="问题" />
-              <el-table-column prop="suggestion" label="建议" />
-            </el-table>
+            <div class="table-scroll">
+              <el-table :data="record.risks">
+                <el-table-column prop="level" label="级别" width="80" />
+                <el-table-column prop="category" label="类型" width="120" />
+                <el-table-column prop="detail" label="问题" />
+                <el-table-column prop="suggestion" label="建议" />
+              </el-table>
+            </div>
           </el-card>
         </template>
       </el-col>
@@ -178,6 +180,20 @@ async function expand() {
 <style scoped>
 .muted {
   color: #667085;
+}
+
+:deep(.el-card__header) {
+  word-break: break-word;
+}
+
+@media (max-width: 600px) {
+  .el-timeline-item__timestamp {
+    font-size: 12px;
+  }
+  :deep(.el-collapse-item__title) {
+    font-size: 13px;
+    word-break: break-word;
+  }
 }
 
 .saved-scripts {

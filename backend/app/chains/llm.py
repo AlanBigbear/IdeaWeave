@@ -37,9 +37,21 @@ class ChatOpenAIWithReasoning(ChatOpenAI):
 
 
 def _is_reasoner(model: str) -> bool:
-    """判断是否为推理模型（deepseek-reasoner / 各类 R1）。推理模型不支持 temperature。"""
+    """判断是否为严格推理模型（deepseek-reasoner / 各类 R1）。这类模型不支持 temperature。"""
     m = (model or "").lower()
     return "reasoner" in m or "-r1" in m or m.startswith("r1")
+
+
+def _spends_tokens_on_reasoning(model: str) -> bool:
+    """判断模型是否会把「思考过程（reasoning_content）」计入 max_tokens 总配额。
+
+    deepseek-v4-pro / deepseek-v4-flash 都属此类：它们接受 temperature，
+    但 max_tokens 是「思考 + 正文」的总预算。若按调用方给的正文预算原样传入，
+    思考一长正文就会被截断甚至清空，导致下游 JSON 解析失败
+    （对外表现就是「调大模型有时会报错」）。
+    """
+    m = (model or "").lower()
+    return _is_reasoner(model) or "deepseek-v4" in m
 
 
 class LLMNotConfigured(HTTPException):
@@ -111,8 +123,13 @@ def build_llm(
     if not base_url or not model or not api_key:
         raise LLMNotConfigured()
 
-    # 推理模型（deepseek-reasoner 等）不支持 temperature，置 None 让其不参与请求体
+    # 严格推理模型（deepseek-reasoner 等）不支持 temperature，置 None 让其不参与请求体
     effective_temperature = None if _is_reasoner(model) else temperature
+    # 思考型模型（deepseek-v4-pro/flash 等）把思考过程也计入 max_tokens，
+    # 调用方传入的 max_tokens 原本是「正文预算」，太小会被思考挤空导致正文截断。
+    # 这里统一抬高到一个足够大的硬上限（思考 + 正文都放得下），既避免截断又保留上限不失控。
+    if _spends_tokens_on_reasoning(model):
+        max_tokens = max(max_tokens or 0, 32000)
 
     def factory() -> ChatOpenAI:
         return ChatOpenAIWithReasoning(

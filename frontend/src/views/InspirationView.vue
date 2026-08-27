@@ -192,4 +192,16 @@ async function preview() {
   padding: 0;
   vertical-align: baseline;
 }
+
+@media (max-width: 600px) {
+  /* 链接抓取：手机上让“抓取提取”按钮更紧凑，别把输入框挤没 */
+  :deep(.el-input-group__append) {
+    padding: 0;
+  }
+  :deep(.el-input-group__append .el-button) {
+    padding: 0 10px;
+    font-size: 12px;
+    white-space: nowrap;
+  }
+}
 </style>

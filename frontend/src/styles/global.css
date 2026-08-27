@@ -24,6 +24,30 @@
   box-sizing: border-box;
 }
 
+html {
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+}
+
+body {
+  overflow-x: hidden;
+}
+
+/* 防止图片/表格等内容在窄屏撑破布局 */
+img,
+video,
+canvas,
+svg {
+  max-width: 100%;
+  height: auto;
+}
+
+/* 触屏点按时去掉默认高亮，观感更干净 */
+a,
+button {
+  -webkit-tap-highlight-color: transparent;
+}
+
 html,
 body,
 #app {
@@ -39,7 +63,7 @@ body,
 
 .page-head h2 {
   margin: 0 0 6px;
-  font-size: 26px;
+  font-size: clamp(20px, 5vw, 26px);
   letter-spacing: -0.03em;
 }
 
@@ -59,6 +83,17 @@ body,
   .card-grid {
     gap: 12px;
   }
+}
+
+/* 表格横向滚动容器：手机上表格不再被裁掉，可左右滑动 */
+.table-scroll {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  border-radius: 12px;
+}
+
+.table-scroll .el-table {
+  min-width: 640px;
 }
 
 .el-card {
@@ -250,10 +285,20 @@ body,
     font-size: 20px;
   }
   .el-dialog {
-    --el-dialog-margin-top: 8vh;
+    --el-dialog-margin-top: 6vh;
+  }
+  .el-dialog__body {
+    padding: 14px 16px 18px;
   }
   .el-message-box {
     width: min(420px, 92vw) !important;
+  }
+  /* 卡片/表格内边距收一收，让内容更满、更耐看 */
+  .el-card__body {
+    padding: 14px;
+  }
+  .el-table {
+    font-size: 13px;
   }
 }
 

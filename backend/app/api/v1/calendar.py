@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends
 from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 
-from app.core.database import get_db
+from app.core.database import SessionLocal, get_db
 from app.core.deps import get_current_user
 from app.models import User
 from app.schemas import (
@@ -45,9 +45,13 @@ def extract_stream(
     user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    def run(session: Session) -> CalendarEventOut:
-        owner = session.get(User, user.id)
-        return calendar_service.extract(session, owner, payload)
+    def run() -> CalendarEventOut:
+        session = SessionLocal()
+        try:
+            owner = session.get(User, user.id)
+            return calendar_service.extract(session, owner, payload)
+        finally:
+            session.close()
 
     return StreamingResponse(
         sse_stream(
@@ -66,9 +70,13 @@ def capture(user: User = Depends(get_current_user), db: Session = Depends(get_db
 
 @router.post("/capture/stream")
 def capture_stream(user: User = Depends(get_current_user), db: Session = Depends(get_db)):
-    def run(session: Session) -> CalendarCaptureOut:
-        owner = session.get(User, user.id)
-        return calendar_service.capture(session, owner)
+    def run() -> CalendarCaptureOut:
+        session = SessionLocal()
+        try:
+            owner = session.get(User, user.id)
+            return calendar_service.capture(session, owner)
+        finally:
+            session.close()
 
     return StreamingResponse(
         sse_stream(

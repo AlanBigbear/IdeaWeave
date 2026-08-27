@@ -19,8 +19,6 @@ from app.services.streaming import sse_token_stream
 
 router = APIRouter(prefix="/personas", tags=["personas"])
 
-router = APIRouter(prefix="/personas", tags=["personas"])
-
 
 @router.get("/options", response_model=PersonaOptionsOut)
 def options():

@@ -26,7 +26,7 @@ def sse_stream(fn, *, serialize, statuses, interval: int = 4):
     """把一个 AI 生成调用包成 SSE 事件流（进度心跳版，用于热点日历等无需展示思考的场景）。
 
     Args:
-        fn: callable(session) -> result。会在独立线程 + 独立 DB 会话中执行，
+        fn: callable() -> result。会在独立线程执行，内部自行创建并关闭 DB 会话，
             客户端断开也会照常完成并保存。
         serialize: callable(result) -> str。把结果转成 JSON 字符串（`done` 事件体）。
         statuses: 依次播报的进度文案；第一条会立刻发出。
@@ -35,8 +35,7 @@ def sse_stream(fn, *, serialize, statuses, interval: int = 4):
     statuses = list(statuses) or ["编导娘正在努力…"]
     yield _sse("status", statuses[0])
 
-    session = SessionLocal()
-    future = _STREAM_POOL.submit(fn, session)
+    future = _STREAM_POOL.submit(fn)
     waited = 0
     try:
         while not future.done():
@@ -49,8 +48,6 @@ def sse_stream(fn, *, serialize, statuses, interval: int = 4):
     except Exception as exc:
         detail = getattr(exc, "detail", str(exc))
         yield _sse("error", json.dumps({"detail": detail}, ensure_ascii=False))
-    finally:
-        session.close()
 
 
 def sse_token_stream(fn, *, serialize):

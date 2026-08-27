@@ -428,6 +428,12 @@ onActivated(() => {
   .el-calendar :deep(.el-calendar-table td) {
     padding: 0;
   }
+  /* 日历格子默认 85px 高，手机上压到 46px，省出纵向空间 */
+  .el-calendar :deep(.el-calendar-day) {
+    height: auto;
+    min-height: 46px;
+    padding: 4px 2px;
+  }
   .event-top {
     flex-wrap: wrap;
   }

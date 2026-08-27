@@ -37,7 +37,7 @@ def _dump_brief(preset: dict) -> str:
 
 def generate_skill(db: Session, user: User, persona_id: int, on_delta=None) -> Persona:
     persona = get_owned_persona(db, user, persona_id)
-    llm = build_llm(db, user, temperature=0.7, max_tokens=1200)
+    llm = build_llm(db, user, temperature=0.4, max_tokens=1200)
     raw, parser = generate_persona_skill_chain(llm, persona)
     skill = run_chain(raw, parser, {}, on_delta)
     persona.skill_prompt = skill.system_prompt.strip()
