@@ -3,7 +3,7 @@
     <div v-if="active" class="ai-progress">
       <div class="ai-emoji">{{ emoji }}</div>
       <div class="ai-body">
-        <p class="ai-hint">{{ currentHint }}</p>
+        <p class="ai-hint"><span class="cursor">{{ displayHint }}</span></p>
         <p class="ai-sub">已等 {{ elapsed }} 秒 · 编导娘努力中，可以先去别的页面逛～</p>
         <div class="ai-bar"><i /></div>
       </div>
@@ -16,9 +16,13 @@ import { computed, onUnmounted, ref, watch } from "vue";
 
 defineOptions({ name: "AiProgress" });
 
-const props = withDefaults(defineProps<{ active: boolean; variant?: string }>(), {
-  variant: "extract",
-});
+const props = withDefaults(
+  defineProps<{ active: boolean; variant?: string; status?: string }>(),
+  {
+    variant: "extract",
+    status: "",
+  },
+);
 
 const HINTS: Record<string, string[]> = {
   extract: [
@@ -63,6 +67,8 @@ const emoji = computed(() => EMOJI[props.variant] || EMOJI.extract);
 const currentHint = computed(
   () => hints.value[Math.min(Math.floor(elapsed.value / 10), hints.value.length - 1)],
 );
+// 有服务端实时文案时优先展示，否则退回按时间轮播的本地文案
+const displayHint = computed(() => props.status || currentHint.value);
 
 function stopTimer() {
   if (timer) clearInterval(timer);
@@ -116,6 +122,17 @@ onUnmounted(stopTimer);
   font-weight: 600;
   font-size: 14px;
   color: #c4537a;
+}
+
+.cursor {
+  border-right: 2px solid #fb7299;
+  padding-right: 2px;
+  animation: ai-blink 0.9s step-end infinite;
+}
+
+@keyframes ai-blink {
+  0%, 100% { border-color: #fb7299; }
+  50% { border-color: transparent; }
 }
 
 .ai-sub {

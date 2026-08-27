@@ -3,7 +3,7 @@ from datetime import date, timedelta
 from sqlalchemy.orm import Session
 
 from app.chains.llm import build_llm
-from app.chains.pipelines import capture_calendar_chain, extract_calendar_chain, invoke_or_502
+from app.chains.pipelines import capture_calendar_chain, extract_calendar_chain, run_chain
 from app.models import CalendarEvent, User
 from app.schemas import (
     CalendarCaptureOut,
@@ -62,9 +62,11 @@ def _insert_payload(db: Session, user: User, payload: dict, seen: set[tuple[str,
 
 def extract(db: Session, user: User, payload: CalendarExtractIn) -> CalendarEventOut:
     persona = require_persona(db, user)
-    llm = build_llm(db, user, temperature=0.2, max_tokens=500)
-    result = invoke_or_502(
-        extract_calendar_chain(llm, persona),
+    llm = build_llm(db, user, temperature=0.2, max_tokens=500, fast=True)
+    raw, parser = extract_calendar_chain(llm, persona)
+    result = run_chain(
+        raw,
+        parser,
         {"raw_text": payload.raw_text[:10000], "today": date.today().isoformat()},
     )
     seen = _existing_keys(db, user)
@@ -95,7 +97,7 @@ def capture(db: Session, user: User) -> CalendarCaptureOut:
     today, until = capture_window()
     hints = seasonal_hints_for_persona(persona, today)
     seen = _existing_keys(db, user)
-    llm = build_llm(db, user, temperature=0.35, max_tokens=1500)
+    llm = build_llm(db, user, temperature=0.6, max_tokens=3000, fast=True)
     # 去重提示只保留窗口附近的事件标题，避免列表无限增长
     window_from = (today - timedelta(days=7)).isoformat()
     window_until = until.isoformat()
@@ -106,8 +108,10 @@ def capture(db: Session, user: User) -> CalendarCaptureOut:
             if window_from <= (start or "") <= window_until
         }
     )
-    bundle = invoke_or_502(
-        capture_calendar_chain(llm, persona),
+    raw, parser = capture_calendar_chain(llm, persona)
+    bundle = run_chain(
+        raw,
+        parser,
         {
             "today": today.isoformat(),
             "until": window_until,

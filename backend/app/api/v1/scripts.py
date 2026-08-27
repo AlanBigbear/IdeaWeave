@@ -1,20 +1,15 @@
-import json
-import time
-from concurrent.futures import ThreadPoolExecutor
-
 from fastapi import APIRouter, Depends
 from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 
-from app.core.database import SessionLocal, get_db
+from app.core.database import get_db
 from app.core.deps import get_current_user
 from app.models import User
 from app.schemas import ExpandScriptIn, ScriptOut
 from app.services import script as script_service
+from app.services.streaming import sse_token_stream
 
 router = APIRouter(prefix="/scripts", tags=["scripts"])
-
-_STREAM_POOL = ThreadPoolExecutor(max_workers=4, thread_name_prefix="bstar-stream")
 
 
 @router.post("/expand", response_model=ScriptOut)
@@ -32,35 +27,14 @@ def expand_stream(
     user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    def events():
-        yield "event: status\ndata: 编导娘正在结合人设与评论写稿，稍等一下下…\n\n"
-        # 用独立会话在后台线程跑 LLM：即使客户端断开，生成结果也会保存
-        session = SessionLocal()
-        future = _STREAM_POOL.submit(
-            script_service.expand, session, user, payload
-        )
-        waited = 0
-        try:
-            while not future.done():
-                # 心跳：每 6 秒给前端阶段感，避免长连接期间毫无反馈
-                time.sleep(1)
-                waited += 1
-                if waited % 6 == 0:
-                    if waited <= 30:
-                        yield "event: status\ndata: 编导娘在搭脚本骨架…\n\n"
-                    elif waited <= 90:
-                        yield "event: status\ndata: 正在逐镜写台词和互动…\n\n"
-                    else:
-                        yield f"event: status\ndata: 快收尾了，已写 {waited} 秒…\n\n"
-            result = future.result()
-            yield f"event: done\ndata: {result.model_dump_json()}\n\n"
-        except Exception as exc:
-            detail = getattr(exc, "detail", str(exc))
-            yield f"event: error\ndata: {json.dumps({'detail': detail}, ensure_ascii=False)}\n\n"
-        finally:
-            session.close()
+    def run(session: Session, on_delta) -> ScriptOut:
+        owner = session.get(User, user.id)
+        return script_service.expand(session, owner, payload, on_delta)
 
-    return StreamingResponse(events(), media_type="text/event-stream")
+    return StreamingResponse(
+        sse_token_stream(run, serialize=lambda r: r.model_dump_json()),
+        media_type="text/event-stream",
+    )
 
 
 @router.get("", response_model=list[ScriptOut])

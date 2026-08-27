@@ -5,7 +5,7 @@ from sqlalchemy import case
 from sqlalchemy.orm import Session
 
 from app.chains.llm import build_llm
-from app.chains.pipelines import extract_topic_chain, invoke_or_502
+from app.chains.pipelines import extract_topic_chain, run_chain
 from app.models import Inspiration, Topic, User
 from app.providers.fetcher import FetchError, FetchResult, clean_url, fetch_webpage
 from app.schemas import (
@@ -71,7 +71,7 @@ def _clean_note(note: str) -> str:
     return _URL_RE.sub(lambda m: clean_url(m.group(0)), note or "")
 
 
-def extract_and_save(db: Session, user: User, payload: ExtractInspirationIn) -> TopicOut:
+def extract_and_save(db: Session, user: User, payload: ExtractInspirationIn, on_delta=None) -> TopicOut:
     persona = require_persona(db, user)
     if payload.url.strip() and not payload.raw_text.strip():
         fetched = _fetch_or_400(payload.url)
@@ -84,15 +84,17 @@ def extract_and_save(db: Session, user: User, payload: ExtractInspirationIn) -> 
         truncated_note = ""
     # 用户备注里若带链接也顺手洗掉跟踪参数
     source_note = _clean_note(source_note).strip()[:500]
-    llm = build_llm(db, user, temperature=0.1, max_tokens=800)
-    chain = extract_topic_chain(llm, persona)
-    result = invoke_or_502(
-        chain,
+    llm = build_llm(db, user, temperature=0.1, max_tokens=800, fast=True)
+    raw, parser = extract_topic_chain(llm, persona)
+    result = run_chain(
+        raw,
+        parser,
         {
             "raw_text": _clip(raw_text, 8000),
             "source_note": _clip(source_note, 200),
             "truncated_note": truncated_note,
         },
+        on_delta,
     )
     feasibility = result.feasibility if result.feasibility in {"quick", "deferred"} else "quick"
     inspiration = Inspiration(

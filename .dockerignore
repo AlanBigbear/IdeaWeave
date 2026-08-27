@@ -1,0 +1,30 @@
+# 减小 docker build 上下文，避免把本地依赖/数据/密钥打进镜像
+
+.git
+.gitignore
+
+# 本地依赖与构建产物（体积大，且平台不对）
+**/node_modules
+frontend/dist
+**/__pycache__
+**/*.pyc
+.venv
+venv
+backend/.venv
+
+# 数据与密钥（不打包进镜像）
+backend/data
+backend/.env
+backend/.env.local
+
+# 迁移产物（dump 通过 compose 挂载，不需要进镜像）
+deploy/*.sql
+deploy/*.log
+
+# 杂项
+.DS_Store
+.idea
+.vscode
+*.log
+.pytest_cache
+.mypy_cache

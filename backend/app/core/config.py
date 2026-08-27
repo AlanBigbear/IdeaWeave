@@ -15,7 +15,8 @@ class Settings(BaseSettings):
     cors_origins: str = "http://localhost:5173,http://127.0.0.1:5173"
     data_dir: Path = Path("./data")
     default_llm_base_url: str = "https://api.deepseek.com/v1"
-    default_llm_model: str = "deepseek-v4-flash"
+    default_llm_model: str = "deepseek-v4-pro"
+    default_llm_fast_model: str = "deepseek-v4-flash"
     default_llm_api_key: str = ""
     database_url: str = ""
     mysql_connect_timeout: int = 5

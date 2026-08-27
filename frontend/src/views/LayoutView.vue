@@ -37,7 +37,11 @@
             <em>{{ personaMeta }}</em>
           </div>
         </div>
-        <div>
+        <div class="topbar-right">
+          <div class="user-chip">
+            <img class="avatar" :src="catAvatar" alt="头像" />
+            <span class="nickname">{{ username }}</span>
+          </div>
           <el-button round @click="router.push('/persona')">改人设</el-button>
           <el-button round plain @click="logout">溜了</el-button>
         </div>
@@ -105,6 +109,8 @@ const navs = [
 ];
 
 const activeId = computed(() => auth.user?.active_persona_id);
+const username = computed(() => auth.user?.username || "UP主");
+const catAvatar = "/avatars/cat-avatar.png";
 
 function go(path: string) {
   if (route.path !== path) router.push(path);
@@ -325,6 +331,40 @@ function logout() {
   animation: pulse 2s ease-in-out infinite;
 }
 
+.topbar-right {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.user-chip {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.avatar {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  object-fit: cover;
+  object-position: top center;
+  background: #fff;
+  border: 2px solid #ffdbe8;
+  box-shadow: 0 2px 10px rgba(255, 107, 157, 0.18);
+  flex-shrink: 0;
+}
+
+.nickname {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--ink);
+  max-width: 140px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .stage {
   position: relative;
   flex: 1;
@@ -459,6 +499,14 @@ function logout() {
   }
   .topbar .el-button {
     padding: 8px 10px;
+  }
+  .avatar {
+    width: 28px;
+    height: 28px;
+  }
+  .nickname {
+    max-width: 72px;
+    font-size: 13px;
   }
   .stage-inner {
     padding: 14px 12px calc(24px + 68px);

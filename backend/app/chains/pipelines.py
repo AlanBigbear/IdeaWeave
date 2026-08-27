@@ -18,6 +18,32 @@ from app.chains.schemas import (
 from app.prompts.personas import persona_skill_fact_sheet, persona_system_prompt
 
 
+class TolerantPydanticOutputParser(PydanticOutputParser):
+    """容错版 PydanticOutputParser。
+
+    模型偶发会把「只有一个 list 字段」的 JSON 对象直接输出成裸数组，
+    例如 IdeaBundle{ideas:[...]} 被输出成 [{...}, ...]。这里自动包回该字段再校验，
+    其余情况原样抛错，不掩盖真正的格式问题。
+    """
+
+    def _parse_obj(self, obj):
+        if isinstance(obj, list):
+            wrapped = self._wrap_bare_list(obj)
+            if wrapped is not None:
+                obj = wrapped
+        return super()._parse_obj(obj)
+
+    def _wrap_bare_list(self, data):
+        list_fields = [
+            name
+            for name, field in self.pydantic_object.model_fields.items()
+            if get_origin(field.annotation) is list
+        ]
+        if len(list_fields) == 1:
+            return {list_fields[0]: data}
+        return None
+
+
 def _field_spec(ftype) -> str:
     origin = get_origin(ftype)
     if origin is list:
@@ -54,7 +80,7 @@ def compact_format_instructions(schema: type[BaseModel]) -> str:
 
 
 def _chain(llm: ChatOpenAI, persona, schema, human: str):
-    parser = PydanticOutputParser(pydantic_object=schema)
+    parser = TolerantPydanticOutputParser(pydantic_object=schema)
     prompt = ChatPromptTemplate.from_messages(
         [
             # format_spec 用 partial 注入：partial 值不参与模板解析，说明文字里的花括号安全
@@ -62,7 +88,7 @@ def _chain(llm: ChatOpenAI, persona, schema, human: str):
             ("human", human),
         ]
     ).partial(system=persona_system_prompt(persona), format_spec=compact_format_instructions(schema))
-    return prompt | llm | parser
+    return (prompt | llm), parser
 
 
 def extract_topic_chain(llm: ChatOpenAI, persona):
@@ -70,14 +96,16 @@ def extract_topic_chain(llm: ChatOpenAI, persona):
         llm,
         persona,
         ExtractedTopic,
-        "从 UP 主提供的爆款摘要或抓取的网页正文中提炼一个可入库选题。\n"
+        "从 UP 主提供的爆款摘要或抓取的网页正文中，精准提炼一个可入库选题。\n"
+        "做「忠实的信息抽取 + 适配人设的判断」，不要脑补原文没有的事实。\n\n"
         "质量规则：\n"
-        "1. 提炼出的选题必须能用该 UP 主的人设来拍：贴合其分区、内容风格和受众；"
-        "若原文与该 UP 主人设不匹配，在 why 里说明冲突点并给 feasibility=deferred；\n"
-        "2. highlights 必须能在原文中找到依据，禁止编造；爆点要能翻译成该 UP 主的拍法；\n"
-        "3. 标题动词开头、具体可执行，≤24字；highlights 3-5 条、每条 ≤25字；"
-        "cost_note ≤40字；why ≤60字；\n"
-        "4. 若内容是广告、公告或信息量过低，在 why 里说明并给 feasibility=deferred。\n"
+        "1. highlights 必须逐条能在原文找到依据——尽量保留原文的具体事实、数字、金句或冲突点，"
+        "压缩成 ≤25 字，禁止编造或写「放哪篇都行」的空话；\n"
+        "2. 标题要抓住原文最核心、最具体的一点（关键数字/结论/反差），动词开头、≤24 字；\n"
+        "3. feasibility 只按「拍摄成本与门槛」判断：明显要跨城/授权/长周期/高投入才给 deferred，"
+        "否则 quick；若原文与该 UP 主人设不匹配，在 why 说明冲突点并给 deferred；\n"
+        "4. cost_note ≤40 字写清主要成本/门槛；why ≤60 字写「为什么值得做 / 为什么不值得立刻做」；\n"
+        "5. 若原文是广告、公告或信息量过低，在 why 里说明并给 deferred。\n"
         "feasibility 只能是 quick 或 deferred。\n"
         "来源备注：{source_note}\n{truncated_note}内容：\n{raw_text}",
     )
@@ -133,33 +161,36 @@ def extract_calendar_chain(llm: ChatOpenAI, persona):
 
 
 def capture_calendar_chain(llm: ChatOpenAI, persona):
-    parser = PydanticOutputParser(pydantic_object=CalendarCaptureBundle)
+    parser = TolerantPydanticOutputParser(pydantic_object=CalendarCaptureBundle)
     prompt = ChatPromptTemplate.from_messages(
         [
             ("system", "{system}\n{format_spec}"),
             (
                 "human",
-                "请只捕捉「未来 30 天」且「与该 UP 主人设强相关」的热点。\n"
+                "请为这个 UP 主捕捉「未来 30 天」能拍、且「有意思」的热点，尽量多给。\n"
                 "今天：{today}\n窗口截止（含）：{until}\n\n"
+                "两类都要挖：\n"
+                "1. 有时效的正式活动：展会/赛事/演唱会/漫展/新品发布/平台大促等；\n"
+                "2. 话题型热点：网络热梗、平台挑战、影视综新番新游、社会情绪话题、节日新玩法等"
+                "——这类没有精确日期也没关系，落到窗口内一个合理日子即可。\n\n"
                 "硬规则：\n"
-                "1. 每条都必须是这个分区/风格/受众会拍的选题；换一个人设就不该出现。\n"
-                "2. 只输出你确定真实存在、能查证的事件（具体展会名/赛事名/作品名/平台活动名）；"
-                "想不起确切名称或日期的事件直接不输出，禁止编造。\n"
-                "3. 标题必须含事件全名 + 城市/场馆，禁止只写「开学季」「秋季热点」这类泛称。\n"
-                "4. vlog_fit 写清「为什么适合 TA + 具体拍法角度」，≤60 字；"
-                "commercial 只写确有机会的一条，≤30 字，没有就留空。\n"
-                "5. 禁止堆无关通用节日。只有能落到该人设具体拍法时才能用节日节点。\n"
-                "6. start_date、end_date 必须是 YYYY-MM-DD，事件必须落在 {today} 至 {until} 内。\n"
-                "7. 不要重复已有标题：{existing}\n"
-                "8. 可参考的季节节点（按人设筛过，仅作提示，不要原样照抄）：{seasonal}\n"
-                "宁可少而精，输出 3-5 条高质量热点；实在没有符合的就少输出。",
+                "1. 优先挑有「冲突 / 反差 / 情绪点」的，能做「值不值得」「避坑」「第一视角体验」"
+                "「省钱爽点」这类选题，别给平淡的信息播报；\n"
+                "2. 每条都贴合这个人设的分区/风格/受众；vlog_fit 写清「有意思的点 + 具体拍法」，≤60 字；"
+                "commercial 只写确有机会的一条，≤30 字，没有就留空；\n"
+                "3. 正式活动尽量用你确定存在或有把握的（拿不准具体日期就写近似值或留空），"
+                "话题型热点不要求精确日期；\n"
+                "4. start_date、end_date 用 YYYY-MM-DD，都要落在 {today} 至 {until} 内；\n"
+                "5. 不要重复已有标题：{existing}\n"
+                "6. 季节节点仅作提示，可参考也可跳过，不要原样照抄：{seasonal}\n\n"
+                "输出 6-10 条；别为了凑数硬编一个不存在的具体活动。",
             ),
         ]
     ).partial(
         system=persona_system_prompt(persona),
         format_spec=compact_format_instructions(CalendarCaptureBundle),
     )
-    return prompt | llm | parser
+    return (prompt | llm), parser
 
 
 def generate_persona_skill_chain(llm: ChatOpenAI, persona):
@@ -192,7 +223,7 @@ def generate_persona_skill_chain(llm: ChatOpenAI, persona):
             ),
         ]
     ).partial(format_spec=compact_format_instructions(PersonaSkill))
-    return prompt | llm | PydanticOutputParser(pydantic_object=PersonaSkill)
+    return (prompt | llm), TolerantPydanticOutputParser(pydantic_object=PersonaSkill)
 
 
 def invoke_or_502(chain, payload):
@@ -202,4 +233,39 @@ def invoke_or_502(chain, payload):
         raise
     except Exception as exc:
         logging.getLogger(__name__).exception("LLM 调用失败")
+        raise HTTPException(status_code=502, detail=f"大模型调用失败：{exc}") from exc
+
+
+def _chunk_reasoning(chunk) -> str:
+    """DeepSeek 推理模型会把思考过程放在 reasoning_content，普通模型则没有。"""
+    for meta in (chunk.additional_kwargs, chunk.response_metadata):
+        if isinstance(meta, dict) and meta.get("reasoning_content"):
+            return str(meta["reasoning_content"])
+    return ""
+
+
+def run_chain(raw, parser, payload, on_delta=None):
+    """跑一条 prompt|llm 链。传入 on_delta 时走流式，把思考/正文增量逐段回调出去。
+
+    on_delta(kind, text)：kind 为 "thinking"（推理模型的思考过程）或 "content"（正文/JSON）。
+    返回解析好的 Pydantic 对象。
+    """
+    if on_delta is None:
+        return invoke_or_502(raw | parser, payload)
+
+    parts: list[str] = []
+    try:
+        for chunk in raw.stream(payload):
+            reasoning = _chunk_reasoning(chunk)
+            content = chunk.content or ""
+            if reasoning:
+                on_delta("thinking", reasoning)
+            if content:
+                on_delta("content", content)
+                parts.append(content)
+        return parser.parse("".join(parts))
+    except HTTPException:
+        raise
+    except Exception as exc:
+        logging.getLogger(__name__).exception("LLM 流式调用失败")
         raise HTTPException(status_code=502, detail=f"大模型调用失败：{exc}") from exc

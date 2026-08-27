@@ -97,6 +97,7 @@ class IdeaSession(Base):
     vague_idea: Mapped[str] = mapped_column(Text)
     ideas_json: Mapped[str] = mapped_column(Text, default="[]")
     selected_index: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    saved_json: Mapped[str] = mapped_column(Text, default="[]")
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
 
 

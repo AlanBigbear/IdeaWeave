@@ -2,7 +2,7 @@ from fastapi import HTTPException
 from sqlalchemy.orm import Session
 
 from app.chains.llm import build_llm
-from app.chains.pipelines import expand_script_chain, invoke_or_502
+from app.chains.pipelines import expand_script_chain, run_chain
 from app.models import IdeaSession, Script, User
 from app.providers.comments import resolve_comments
 from app.schemas import ExpandScriptIn, ScriptOut
@@ -35,7 +35,7 @@ def _idea_hint_text(ideas: list[dict], selected_index: int | None) -> str:
     return f"未选定，三个方案标题：{titles}" if titles else "无"
 
 
-def expand(db: Session, user: User, payload: ExpandScriptIn) -> ScriptOut:
+def expand(db: Session, user: User, payload: ExpandScriptIn, on_delta=None) -> ScriptOut:
     persona = require_persona(db, user)
     idea_hint = "无"
     if payload.idea_session_id:
@@ -46,14 +46,17 @@ def expand(db: Session, user: User, payload: ExpandScriptIn) -> ScriptOut:
     _, comments = resolve_comments(payload.use_mock_comments, payload.comments_text)
     comments_blob = "\n".join(f"- {item}" for item in comments) or "（无评论）"
     llm = build_llm(db, user, temperature=0.55, max_tokens=4000)
-    bundle = invoke_or_502(
-        expand_script_chain(llm, persona),
+    raw, parser = expand_script_chain(llm, persona)
+    bundle = run_chain(
+        raw,
+        parser,
         {
             "outline": payload.outline[:8000],
             "shot_list": (payload.shot_list or "未提供，请按人设视频形态自行补全拍摄要点")[:2000],
             "comments": comments_blob[:4000],
             "idea_hint": idea_hint,
         },
+        on_delta,
     )
     row = Script(
         user_id=user.id,

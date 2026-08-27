@@ -2,6 +2,8 @@ import client from "./client";
 import type {
   CalendarEvent,
   FetchPreview,
+  IdeaCard,
+  IdeaItem,
   IdeaSession,
   Persona,
   PersonaOptions,
@@ -81,6 +83,13 @@ export const ideaApi = {
   get: (id: number) => client.get<IdeaSession>(`/ideas/${id}`),
   select: (id: number, index: number) =>
     client.post<IdeaSession>(`/ideas/${id}/select`, { index }),
+  save: (id: number, index: number, saved: boolean) =>
+    client.post<IdeaSession>(`/ideas/${id}/save`, { index, saved }),
+  listCards: () => client.get<IdeaCard[]>("/ideas/cards"),
+  updateCard: (sessionId: number, index: number, payload: IdeaItem) =>
+    client.patch<IdeaCard>(`/ideas/${sessionId}/cards/${index}`, payload),
+  deleteCard: (sessionId: number, index: number) =>
+    client.delete(`/ideas/${sessionId}/cards/${index}`),
 };
 
 export const scriptApi = {
@@ -103,17 +112,21 @@ export const calendarApi = {
   remove: (id: number) => client.delete(`/calendar/${id}`),
 };
 
-export async function expandScriptStream(
-  payload: {
-    outline: string;
-    shot_list?: string;
-    topic_id?: number | null;
-    idea_session_id?: number | null;
-  },
-  onStatus: (msg: string) => void,
-): Promise<ScriptRecord> {
+export type TokenKind = "thinking" | "content";
+export type TokenHandler = (kind: TokenKind, text: string) => void;
+
+/**
+ * 通用 SSE 流式客户端：POST JSON 到后端 /stream 端点。
+ * 按需回调 onStatus（进度文案）或 onToken（逐字 token），最后返回 done 里的结构化结果。
+ */
+async function sseRequest<T>(
+  url: string,
+  payload: unknown,
+  handlers: { onStatus?: (msg: string) => void; onToken?: TokenHandler } = {},
+): Promise<T> {
+  const { onStatus, onToken } = handlers;
   const token = localStorage.getItem("bstar_token");
-  const res = await fetch("/api/v1/scripts/expand/stream", {
+  const res = await fetch(url, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
@@ -121,13 +134,25 @@ export async function expandScriptStream(
     },
     body: JSON.stringify(payload),
   });
+
+  if (!res.ok) {
+    let detail = `请求失败（${res.status}）`;
+    try {
+      const data = await res.json();
+      if (typeof data.detail === "string") detail = data.detail;
+    } catch {
+      // 非 JSON 错误体，忽略
+    }
+    throw new Error(detail);
+  }
+
   if (!res.body) {
     throw new Error("无法建立流式连接");
   }
   const reader = res.body.getReader();
   const decoder = new TextDecoder();
   let buffer = "";
-  let result: ScriptRecord | null = null;
+  let result: T | null = null;
   let errorMsg = "";
   while (true) {
     const { done, value } = await reader.read();
@@ -139,17 +164,66 @@ export async function expandScriptStream(
       const eventMatch = chunk.match(/^event: (.+)$/m);
       const dataMatch = chunk.match(/^data: ([\s\S]+)$/m);
       if (!eventMatch || !dataMatch) continue;
-      const event = eventMatch[1];
+      const event = eventMatch[1].trim();
       const data = dataMatch[1];
-      if (event === "status") onStatus(data);
-      if (event === "done") result = JSON.parse(data) as ScriptRecord;
-      if (event === "error") {
+      if (event === "status") onStatus?.(data);
+      else if (event === "token") {
+        const parsed = JSON.parse(data);
+        onToken?.(parsed.kind, parsed.text);
+      } else if (event === "done") result = JSON.parse(data) as T;
+      else if (event === "error") {
         const parsed = JSON.parse(data);
         errorMsg = parsed.detail || "生成失败";
       }
     }
   }
   if (errorMsg) throw new Error(errorMsg);
-  if (!result) throw new Error("未收到脚本结果");
+  if (!result) throw new Error("未收到结果");
   return result;
+}
+
+export async function expandScriptStream(
+  payload: {
+    outline: string;
+    shot_list?: string;
+    topic_id?: number | null;
+    idea_session_id?: number | null;
+  },
+  onToken: TokenHandler,
+): Promise<ScriptRecord> {
+  return sseRequest<ScriptRecord>("/api/v1/scripts/expand/stream", payload, { onToken });
+}
+
+export function divergeStream(
+  payload: { vague_idea: string; topic_id?: number | null },
+  onToken: TokenHandler,
+): Promise<IdeaSession> {
+  return sseRequest<IdeaSession>("/api/v1/ideas/diverge/stream", payload, { onToken });
+}
+
+export function extractInspirationStream(
+  payload: { raw_text?: string; source_note?: string; url?: string },
+  onToken: TokenHandler,
+): Promise<Topic> {
+  return sseRequest<Topic>("/api/v1/inspirations/extract/stream", payload, { onToken });
+}
+
+export function calendarExtractStream(
+  raw_text: string,
+  onStatus: (msg: string) => void,
+): Promise<CalendarEvent> {
+  return sseRequest<CalendarEvent>("/api/v1/calendar/extract/stream", { raw_text }, { onStatus });
+}
+
+export function calendarCaptureStream(
+  onStatus: (msg: string) => void,
+): Promise<{ created: number; skipped: number; warning: string; events: CalendarEvent[] }> {
+  return sseRequest("/api/v1/calendar/capture/stream", {}, { onStatus });
+}
+
+export function generateSkillStream(
+  personaId: number,
+  onToken: TokenHandler,
+): Promise<Persona> {
+  return sseRequest<Persona>(`/api/v1/personas/${personaId}/skill/stream`, {}, { onToken });
 }

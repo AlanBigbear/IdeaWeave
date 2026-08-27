@@ -54,7 +54,7 @@
               <el-button @click="rawText = SAMPLE_VIRAL">塞个示例</el-button>
             </el-space>
           </el-form>
-          <AiProgress :active="loading" variant="extract" />
+          <AiStream :active="loading" :thinking="thinking" :content="content" emoji="✨" />
         </el-card>
       </el-col>
       <el-col :md="10">
@@ -81,10 +81,11 @@
 import { ref } from "vue";
 import { useRouter } from "vue-router";
 import { ElMessage } from "element-plus";
-import { inspirationApi } from "../api";
+import { extractInspirationStream, inspirationApi } from "../api";
 import { SAMPLE_VIRAL, type Topic } from "../types";
 import { useWorkspaceStore } from "../stores/workspace";
 import AiProgress from "../components/AiProgress.vue";
+import AiStream from "../components/AiStream.vue";
 
 defineOptions({ name: "InspirationView" });
 
@@ -96,6 +97,8 @@ const rawText = ref("");
 const sourceNote = ref("");
 const loading = ref(false);
 const fetching = ref(false);
+const thinking = ref("");
+const content = ref("");
 const result = ref<Topic | null>(null);
 
 function requireLink(): string | null {
@@ -113,11 +116,20 @@ async function extractByText() {
     return;
   }
   loading.value = true;
+  thinking.value = "";
+  content.value = "";
   try {
-    const { data } = await inspirationApi.extract({ raw_text: rawText.value, source_note: sourceNote.value });
-    result.value = data;
+    result.value = await extractInspirationStream(
+      { raw_text: rawText.value, source_note: sourceNote.value },
+      (kind, text) => {
+        if (kind === "thinking") thinking.value += text;
+        else content.value += text;
+      },
+    );
     void workspace.refreshTopics();
     ElMessage.success("收进选题库啦！");
+  } catch (err) {
+    ElMessage.error(err instanceof Error ? err.message : "生成失败");
   } finally {
     loading.value = false;
   }
@@ -127,11 +139,20 @@ async function extractByLink() {
   const link = requireLink();
   if (!link) return;
   loading.value = true;
+  thinking.value = "";
+  content.value = "";
   try {
-    const { data } = await inspirationApi.extract({ url: link, source_note: sourceNote.value });
-    result.value = data;
+    result.value = await extractInspirationStream(
+      { url: link, source_note: sourceNote.value },
+      (kind, text) => {
+        if (kind === "thinking") thinking.value += text;
+        else content.value += text;
+      },
+    );
     void workspace.refreshTopics();
     ElMessage.success("原文到手，已收进选题库！");
+  } catch (err) {
+    ElMessage.error(err instanceof Error ? err.message : "生成失败");
   } finally {
     loading.value = false;
   }
