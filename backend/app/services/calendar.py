@@ -97,7 +97,7 @@ def capture(db: Session, user: User) -> CalendarCaptureOut:
     today, until = capture_window()
     hints = seasonal_hints_for_persona(persona, today)
     seen = _existing_keys(db, user)
-    llm = build_llm(db, user, temperature=0.6, max_tokens=3000, fast=True)
+    llm = build_llm(db, user, temperature=0.5, max_tokens=3000, fast=True)
     # 去重提示只保留窗口附近的事件标题，避免列表无限增长
     window_from = (today - timedelta(days=7)).isoformat()
     window_until = until.isoformat()

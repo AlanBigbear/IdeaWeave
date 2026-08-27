@@ -487,6 +487,19 @@ function logout() {
     padding: 8px 14px;
     gap: 8px;
   }
+  .who {
+    min-width: 0;
+    flex: 1 1 auto;
+  }
+  .who > div {
+    min-width: 0;
+  }
+  .who strong {
+    display: block;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
   .who em {
     max-width: 150px;
     overflow: hidden;
@@ -505,8 +518,7 @@ function logout() {
     height: 28px;
   }
   .nickname {
-    max-width: 72px;
-    font-size: 13px;
+    display: none;
   }
   .stage-inner {
     padding: 14px 12px calc(24px + 68px);

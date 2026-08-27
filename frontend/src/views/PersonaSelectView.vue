@@ -300,7 +300,7 @@ function goHome() {
   display: flex;
   flex-direction: column;
   position: relative;
-  overflow: hidden;
+  overflow: clip;
   background:
     radial-gradient(circle at 90% 0%, #ffd0e4, transparent 36%),
     var(--bg);

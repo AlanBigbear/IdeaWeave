@@ -31,7 +31,7 @@ def diverge(db: Session, user: User, payload: DivergeIn, on_delta=None) -> IdeaS
         if topic is None or topic.user_id != user.id:
             raise HTTPException(status_code=404, detail="选题不存在")
         topic_hint = f"{topic.title} | {topic.why}"
-    llm = build_llm(db, user, temperature=0.8, max_tokens=1600, fast=True)
+    llm = build_llm(db, user, temperature=0.5, max_tokens=1600, fast=True)
     raw, parser = diverge_ideas_chain(llm, persona)
     bundle = run_chain(
         raw,

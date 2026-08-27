@@ -45,7 +45,7 @@ def expand(db: Session, user: User, payload: ExpandScriptIn, on_delta=None) -> S
         idea_hint = _idea_hint_text(loads(session.ideas_json, []), session.selected_index)
     _, comments = resolve_comments(payload.use_mock_comments, payload.comments_text)
     comments_blob = "\n".join(f"- {item}" for item in comments) or "（无评论）"
-    llm = build_llm(db, user, temperature=0.55, max_tokens=4000)
+    llm = build_llm(db, user, temperature=0.45, max_tokens=4000)
     raw, parser = expand_script_chain(llm, persona)
     bundle = run_chain(
         raw,
