@@ -1,5 +1,7 @@
+import asyncio
 import logging
 import traceback
+from contextlib import asynccontextmanager, suppress
 from pathlib import Path
 
 from fastapi import FastAPI, Request
@@ -12,13 +14,42 @@ from starlette.types import Scope
 from app.api.v1 import api_router
 from app.core.config import settings
 from app.core.database import Base, db_info, engine, migrate_schema
+from app.services.trial import reset_all_trial_accounts
 
 logger = logging.getLogger("bstar.errors")
 
-Base.metadata.create_all(bind=engine)
-migrate_schema()
 
-app = FastAPI(title="B-Star 虚拟编导工作台", version="0.1.0")
+async def _reset_trial_periodically() -> None:
+    while True:
+        await asyncio.sleep(max(settings.trial_reset_minutes, 1) * 60)
+        try:
+            await asyncio.to_thread(reset_all_trial_accounts)
+            logger.info("试用空间已恢复为默认模板")
+        except Exception:
+            logger.exception("定时恢复试用空间失败")
+
+
+@asynccontextmanager
+async def lifespan(_: FastAPI):
+    Base.metadata.create_all(bind=engine)
+    migrate_schema()
+    task = None
+    if settings.trial_enabled:
+        try:
+            await asyncio.to_thread(reset_all_trial_accounts)
+        except Exception:
+            logger.exception("初始化试用空间失败，服务将继续启动")
+        task = asyncio.create_task(_reset_trial_periodically())
+    try:
+        yield
+    finally:
+        if task is not None:
+            task.cancel()
+            with suppress(asyncio.CancelledError):
+                await task
+
+
+app = FastAPI(title="B-Star 虚拟编导工作台", version="0.1.0", lifespan=lifespan)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.cors_origin_list,

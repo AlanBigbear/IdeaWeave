@@ -27,8 +27,9 @@ services:
       MYSQL_PASSWORD: ${MYSQL_PASSWORD:-please-change-user}
     volumes:
       - db_data:/var/lib/mysql
-      # 首次初始化自动导入；文件不存在时请先跑 dump_mysql.py
+      # 首次初始化依次导入完整数据与公共试用空间；已有 volume 不会重复执行
       - ./deploy/ideaweave_full.sql:/docker-entrypoint-initdb.d/01_ideaweave.sql:ro
+      - ./deploy/ideaweave_trial.sql:/docker-entrypoint-initdb.d/02_ideaweave_trial.sql:ro
     healthcheck:
       test: ["CMD-SHELL", "mysqladmin ping -h 127.0.0.1 -uroot -p\"$$MYSQL_ROOT_PASSWORD\" --silent"]
       interval: 5s
@@ -51,8 +52,19 @@ services:
       JWT_SECRET: ${JWT_SECRET:-please-change-this-jwt-secret-32bytes+}
       DATA_DIR: /app/data
       DEFAULT_LLM_BASE_URL: ${DEFAULT_LLM_BASE_URL:-https://api.deepseek.com/v1}
-      DEFAULT_LLM_MODEL: ${DEFAULT_LLM_MODEL:-deepseek-v4-flash}
+      DEFAULT_LLM_MODEL: ${DEFAULT_LLM_MODEL:-deepseek-v4-pro}
+      DEFAULT_LLM_FAST_MODEL: ${DEFAULT_LLM_FAST_MODEL:-deepseek-v4-flash}
       DEFAULT_LLM_API_KEY: ${DEFAULT_LLM_API_KEY:-}
+      TRIAL_ENABLED: ${TRIAL_ENABLED:-true}
+      TRIAL_USERNAME: ${TRIAL_USERNAME:-demo}
+      TRIAL_ANIME_USERNAME: ${TRIAL_ANIME_USERNAME:-demo-anime}
+      TRIAL_PET_USERNAME: ${TRIAL_PET_USERNAME:-demo-pet}
+      TRIAL_RESET_MINUTES: ${TRIAL_RESET_MINUTES:-60}
+      TRIAL_JWT_EXPIRE_MINUTES: ${TRIAL_JWT_EXPIRE_MINUTES:-120}
+      TRIAL_LOGIN_REQUESTS_PER_MINUTE: ${TRIAL_LOGIN_REQUESTS_PER_MINUTE:-20}
+      TRIAL_GENERATION_REQUESTS_PER_WINDOW: ${TRIAL_GENERATION_REQUESTS_PER_WINDOW:-5}
+      TRIAL_GENERATION_WINDOW_SECONDS: ${TRIAL_GENERATION_WINDOW_SECONDS:-600}
+      TRIAL_GENERATION_MAX_CONCURRENCY: ${TRIAL_GENERATION_MAX_CONCURRENCY:-2}
     ports:
       - "${BACKEND_PORT:-8000}:8000"
     volumes:

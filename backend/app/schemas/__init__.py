@@ -1,5 +1,6 @@
 import json
 from datetime import datetime
+from typing import Literal
 
 from pydantic import BaseModel, Field, field_validator, model_validator
 
@@ -10,7 +11,7 @@ class TokenOut(BaseModel):
 
 
 class RegisterIn(BaseModel):
-    username: str = Field(min_length=3, max_length=32)
+    username: str = Field(min_length=1, max_length=32)
     password: str = Field(min_length=6, max_length=64)
 
 
@@ -19,11 +20,16 @@ class LoginIn(BaseModel):
     password: str
 
 
+class TrialLoginIn(BaseModel):
+    account: Literal["tech", "anime", "pet"] = "tech"
+
+
 class UserOut(BaseModel):
     id: int
     username: str
     active_persona_id: int | None
     created_at: datetime
+    is_trial: bool = False
 
     model_config = {"from_attributes": True}
 

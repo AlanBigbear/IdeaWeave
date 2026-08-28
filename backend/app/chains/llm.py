@@ -113,11 +113,17 @@ def build_llm(
     from app.services.secrets_store import get_effective_api_key
 
     cfg = get_user_settings(db, user)
-    api_key = get_effective_api_key(user.id, cfg.llm_api_key)
-    base_url = normalize_openai_base_url(cfg.llm_base_url or settings.default_llm_base_url)
+    from app.services.trial import is_trial_user
+
+    trial = is_trial_user(user)
+    api_key = settings.default_llm_api_key if trial else get_effective_api_key(user.id, cfg.llm_api_key)
+    configured_url = settings.default_llm_base_url if trial else cfg.llm_base_url
+    base_url = normalize_openai_base_url(configured_url or settings.default_llm_base_url)
     if fast:
         # 轻任务走快速模型（非推理），压低首字/整体延迟
         model = (settings.default_llm_fast_model or settings.default_llm_model).strip()
+    elif trial:
+        model = settings.default_llm_model.strip()
     else:
         model = (cfg.llm_model or settings.default_llm_model).strip()
     if not base_url or not model or not api_key:

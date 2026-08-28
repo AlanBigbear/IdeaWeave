@@ -15,11 +15,15 @@ import type {
   User,
 } from "../types";
 
+export type TrialAccountKey = "tech" | "anime" | "pet";
+
 export const authApi = {
   register: (username: string, password: string) =>
     client.post<{ access_token: string }>("/auth/register", { username, password }),
   login: (username: string, password: string) =>
     client.post<{ access_token: string }>("/auth/login", { username, password }),
+  trial: (account: TrialAccountKey = "tech") =>
+    client.post<{ access_token: string }>("/auth/trial", { account }),
   me: () => client.get<User>("/auth/me"),
 };
 
