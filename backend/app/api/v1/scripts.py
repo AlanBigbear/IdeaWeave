@@ -8,11 +8,12 @@ from app.models import User
 from app.schemas import ExpandScriptIn, ScriptOut
 from app.services import script as script_service
 from app.services.streaming import sse_token_stream
+from app.services.trial import trial_generation_slot
 
 router = APIRouter(prefix="/scripts", tags=["scripts"])
 
 
-@router.post("/expand", response_model=ScriptOut)
+@router.post("/expand", response_model=ScriptOut, dependencies=[Depends(trial_generation_slot)])
 def expand(
     payload: ExpandScriptIn,
     user: User = Depends(get_current_user),
@@ -21,7 +22,7 @@ def expand(
     return script_service.expand(db, user, payload)
 
 
-@router.post("/expand/stream")
+@router.post("/expand/stream", dependencies=[Depends(trial_generation_slot)])
 def expand_stream(
     payload: ExpandScriptIn,
     user: User = Depends(get_current_user),

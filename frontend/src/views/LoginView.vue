@@ -32,10 +32,48 @@
           <el-form-item>
             <el-input v-model="password" type="password" placeholder="密码（至少 6 位）" size="large" show-password />
           </el-form-item>
-          <el-button class="go" type="primary" size="large" :loading="loading" @click="submit">
+          <el-button
+            class="go"
+            type="primary"
+            size="large"
+            :loading="loading"
+            :disabled="loading || trialLoading"
+            @click="submit"
+          >
             {{ mode === "login" ? "开工！" : "去捏人设！" }}
           </el-button>
         </el-form>
+        <div class="trial-entry">
+          <p class="trial-title">免注册体验完整工作台</p>
+          <div class="pick-grid trial-picks">
+            <button
+              v-for="t in trialAccounts"
+              :key="t.key"
+              type="button"
+              class="pick-card"
+              :class="{ active: selectedTrial === t.key }"
+              :aria-pressed="selectedTrial === t.key"
+              :disabled="loading || trialLoading"
+              @click="selectedTrial = t.key"
+            >
+              <i class="emoji">{{ t.emoji }}</i>
+              <b>{{ t.label }}</b>
+              <span>{{ t.desc }}</span>
+            </button>
+          </div>
+          <el-button
+            class="trial-go"
+            size="large"
+            :loading="trialLoading"
+            :disabled="loading || trialLoading"
+            @click="startTrial"
+          >
+            进入所选体验空间
+          </el-button>
+          <p class="trial-note">
+            共享体验账号，操作对其他访客可见，数据会定期重置。
+          </p>
+        </div>
         <p class="hint">今天也要更新哦 · 先把这一期想清楚再拍</p>
       </div>
     </section>
@@ -46,7 +84,7 @@
 import { ref } from "vue";
 import { useRouter } from "vue-router";
 import { ElMessage } from "element-plus";
-import { authApi } from "../api";
+import { authApi, type TrialAccountKey } from "../api";
 import SparkleField from "../components/SparkleField.vue";
 import hero from "../assets/login-hero.webp";
 import stickers from "../assets/kawaii-stickers.webp";
@@ -60,10 +98,17 @@ const mode = ref<"login" | "register">("login");
 const username = ref("");
 const password = ref("");
 const loading = ref(false);
+const trialLoading = ref(false);
+const selectedTrial = ref<TrialAccountKey>("tech");
+const trialAccounts = [
+  { key: "tech", emoji: "📱", label: "科技数码", desc: "实测不盲吹" },
+  { key: "anime", emoji: "🎀", label: "二次元收藏", desc: "开箱验货 · 避坑" },
+  { key: "pet", emoji: "🐾", label: "萌宠动物", desc: "萌系日常 · 科学养宠" },
+] as const;
 
 async function submit() {
-  if (username.value.length < 3 || password.value.length < 6) {
-    ElMessage.warning("用户名至少 3 位，密码至少 6 位");
+  if (!username.value.trim() || password.value.length < 6) {
+    ElMessage.warning("用户名不能为空，密码至少 6 位");
     return;
   }
   loading.value = true;
@@ -75,6 +120,17 @@ async function submit() {
     await router.push(auth.hasPersona ? "/inspiration" : "/persona");
   } finally {
     loading.value = false;
+  }
+}
+
+async function startTrial() {
+  trialLoading.value = true;
+  try {
+    const { data } = await authApi.trial(selectedTrial.value);
+    await auth.setToken(data.access_token);
+    await router.push("/inspiration");
+  } finally {
+    trialLoading.value = false;
   }
 }
 </script>
@@ -211,6 +267,82 @@ h1 {
   height: 46px;
   border-radius: 999px !important;
   font-weight: 700;
+}
+
+.trial-entry {
+  margin-top: 14px;
+  padding-top: 14px;
+  border-top: 1px solid rgba(255, 107, 157, 0.16);
+}
+
+.trial-title {
+  margin: 0 0 10px;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 600;
+  text-align: center;
+}
+
+.trial-picks {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+.trial-picks .pick-card {
+  min-height: 92px;
+  padding: 12px 8px 10px;
+  border-radius: 16px;
+  text-align: center;
+}
+
+.trial-picks .pick-card .emoji {
+  font-size: 22px;
+  margin-bottom: 6px;
+}
+
+.trial-picks .pick-card b {
+  font-size: 13px;
+  margin-bottom: 3px;
+}
+
+.trial-picks .pick-card span {
+  font-size: 10.5px;
+  line-height: 1.35;
+}
+
+.trial-picks .pick-card:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+  transform: none;
+}
+
+.trial-go {
+  width: 100%;
+  height: 44px;
+  border-radius: 999px !important;
+  border-color: rgba(255, 107, 157, 0.5);
+  background: rgba(255, 255, 255, 0.72);
+  color: var(--accent);
+  font-weight: 700;
+  transition: transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease;
+}
+
+.trial-go:not(.is-disabled):hover,
+.trial-go:not(.is-disabled):focus-visible {
+  border-color: var(--accent);
+  background: #fff7fa;
+  color: var(--accent);
+  box-shadow: 0 8px 20px rgba(255, 107, 157, 0.14);
+  transform: translateY(-1px);
+}
+
+.trial-note {
+  margin: 9px 8px 0;
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.55;
+  text-align: center;
 }
 
 .hint {

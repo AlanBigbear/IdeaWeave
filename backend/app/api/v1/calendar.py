@@ -14,6 +14,7 @@ from app.schemas import (
 )
 from app.services import calendar as calendar_service
 from app.services.streaming import sse_stream
+from app.services.trial import trial_generation_slot
 
 router = APIRouter(prefix="/calendar", tags=["calendar"])
 
@@ -30,7 +31,7 @@ _CAPTURE_STATUSES = [
 ]
 
 
-@router.post("/extract", response_model=CalendarEventOut)
+@router.post("/extract", response_model=CalendarEventOut, dependencies=[Depends(trial_generation_slot)])
 def extract(
     payload: CalendarExtractIn,
     user: User = Depends(get_current_user),
@@ -39,7 +40,7 @@ def extract(
     return calendar_service.extract(db, user, payload)
 
 
-@router.post("/extract/stream")
+@router.post("/extract/stream", dependencies=[Depends(trial_generation_slot)])
 def extract_stream(
     payload: CalendarExtractIn,
     user: User = Depends(get_current_user),
@@ -63,12 +64,12 @@ def extract_stream(
     )
 
 
-@router.post("/capture", response_model=CalendarCaptureOut)
+@router.post("/capture", response_model=CalendarCaptureOut, dependencies=[Depends(trial_generation_slot)])
 def capture(user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     return calendar_service.capture(db, user)
 
 
-@router.post("/capture/stream")
+@router.post("/capture/stream", dependencies=[Depends(trial_generation_slot)])
 def capture_stream(user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     def run() -> CalendarCaptureOut:
         session = SessionLocal()

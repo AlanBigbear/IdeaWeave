@@ -8,11 +8,12 @@ from app.models import User
 from app.schemas import DivergeIn, IdeaCardOut, IdeaItem, IdeaSessionOut, SaveIdeaIn, SelectIdeaIn
 from app.services import idea as idea_service
 from app.services.streaming import sse_token_stream
+from app.services.trial import trial_generation_slot
 
 router = APIRouter(prefix="/ideas", tags=["ideas"])
 
 
-@router.post("/diverge", response_model=IdeaSessionOut)
+@router.post("/diverge", response_model=IdeaSessionOut, dependencies=[Depends(trial_generation_slot)])
 def diverge(
     payload: DivergeIn,
     user: User = Depends(get_current_user),
@@ -21,7 +22,7 @@ def diverge(
     return idea_service.diverge(db, user, payload)
 
 
-@router.post("/diverge/stream")
+@router.post("/diverge/stream", dependencies=[Depends(trial_generation_slot)])
 def diverge_stream(
     payload: DivergeIn,
     user: User = Depends(get_current_user),

@@ -32,7 +32,17 @@ npm install
 npm run dev
 ```
 
-打开 http://localhost:5173 → 注册登录 → 完善人设。默认已接 DeepSeek `deepseek-v4-pro`（Key 可写在 `backend/.env` 的 `DEFAULT_LLM_API_KEY`，用户覆盖存在 MySQL `user_settings`）。
+打开 http://localhost:5173 → 注册登录 → 完善人设；也可以在登录页选一个体验空间直接进入。默认已接 DeepSeek `deepseek-v4-pro`（Key 可写在 `backend/.env` 的 `DEFAULT_LLM_API_KEY`，用户覆盖存在 `user_settings`）。
+
+### 公共试用空间
+
+- `POST /api/v1/auth/trial` 会给访客签发一个较短有效期的普通 JWT，不公开或校验试用密码；body 传 `{ "account": "tech" | "anime" | "pet" }` 选择空间，不传则默认 `tech`，非法 key 返回 422。
+- 三个共享保留账号：`demo`（科技数码 · 数码省钱实验室）、`demo-anime`（二次元收藏 · 谷子收藏研究所）、`demo-pet`（萌宠动物 · 毛球生活观察局）。访客在登录页用三张卡片选择，保留用户名及其大小写变体都不能注册或密码登录。
+- 所有访客共享所选账号，可以生成、编辑和删除内容；因此不要在试用空间填写隐私或敏感信息。三个账号共用一套按 IP 的进程内限流，切换空间不会放大模型额度。
+- 后端启动时以及每隔 `TRIAL_RESET_MINUTES`（默认 60 分钟）会恢复每个账号各自的人设（数码省钱实验室 / 谷子收藏研究所 / 毛球生活观察局）和贯通各页面的示例数据。试用访客不能修改模型地址、模型名或 API Key，设置页会显示只读提示。
+- 可在 `backend/.env` 设置 `TRIAL_ENABLED=false` 关闭入口，其他 `TRIAL_*` 默认值见 `backend/.env.example`。
+
+独立 MySQL 8 基线文件为 `deploy/ideaweave_trial.sql`，同一事务内分三段写三个账号。它不建表、不包含明文密码或模型密钥，可在 **已创建 IdeaWeave schema** 的新库中导入。手动导入现有库前，请先备份并确认用户名 `demo` / `demo-anime` / `demo-pet` 已保留为可销毁的公共试用账号；脚本会替换且只替换这三个账号拥有的数据。SQLite 不需要导入 SQL，应用启动会通过同一套 Python 服务创建基线。注意已有 MySQL 数据卷不会自动重跑 init SQL，升级需备份后手动导入。
 
 数据默认写入 MySQL（`DATABASE_URL`）。未配置时回退本地 `backend/data/bstar.db`。
 

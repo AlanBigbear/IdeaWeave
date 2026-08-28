@@ -21,6 +21,16 @@ class Settings(BaseSettings):
     database_url: str = ""
     mysql_connect_timeout: int = 5
     mysql_fallback_sqlite: bool = True
+    trial_enabled: bool = True
+    trial_username: str = "demo"
+    trial_anime_username: str = "demo-anime"
+    trial_pet_username: str = "demo-pet"
+    trial_reset_minutes: int = 60
+    trial_jwt_expire_minutes: int = 120
+    trial_login_requests_per_minute: int = 20
+    trial_generation_requests_per_window: int = 5
+    trial_generation_window_seconds: int = 600
+    trial_generation_max_concurrency: int = 2
 
     def model_post_init(self, __context) -> None:
         if not self.data_dir.is_absolute():

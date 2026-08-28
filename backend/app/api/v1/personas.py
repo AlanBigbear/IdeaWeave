@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 
@@ -16,6 +16,11 @@ from app.schemas import (
 from app.services import jobs as jobs_service
 from app.services import persona as persona_service
 from app.services.streaming import sse_token_stream
+from app.services.trial import (
+    acquire_trial_generation_slot,
+    release_trial_generation_slot,
+    trial_generation_slot,
+)
 
 router = APIRouter(prefix="/personas", tags=["personas"])
 
@@ -76,7 +81,7 @@ def update_persona(
     return persona_service.update_persona(db, user, persona_id, payload)
 
 
-@router.post("/{persona_id}/skill", response_model=PersonaOut)
+@router.post("/{persona_id}/skill", response_model=PersonaOut, dependencies=[Depends(trial_generation_slot)])
 def generate_persona_skill(
     persona_id: int,
     user: User = Depends(get_current_user),
@@ -85,7 +90,7 @@ def generate_persona_skill(
     return persona_service.generate_skill(db, user, persona_id)
 
 
-@router.post("/{persona_id}/skill/stream")
+@router.post("/{persona_id}/skill/stream", dependencies=[Depends(trial_generation_slot)])
 def generate_persona_skill_stream(
     persona_id: int,
     user: User = Depends(get_current_user),
@@ -105,10 +110,12 @@ def generate_persona_skill_stream(
 @router.post("/{persona_id}/skill/async")
 def generate_persona_skill_async(
     persona_id: int,
+    request: Request,
     user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
     persona_service.get_owned_persona(db, user, persona_id)
+    acquired = acquire_trial_generation_slot(request, user)
 
     def task() -> dict:
         session = SessionLocal()
@@ -118,8 +125,15 @@ def generate_persona_skill_async(
             return {"persona": PersonaOut.model_validate(persona).model_dump()}
         finally:
             session.close()
+            release_trial_generation_slot(acquired)
 
-    job_id = jobs_service.submit(f"skill:{user.id}:{persona_id}", task)
+    try:
+        job_id, submitted = jobs_service.submit(f"skill:{user.id}:{persona_id}", task)
+    except Exception:
+        release_trial_generation_slot(acquired)
+        raise
+    if not submitted:
+        release_trial_generation_slot(acquired)
     return {"job_id": job_id}
 
 

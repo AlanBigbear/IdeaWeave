@@ -29,11 +29,11 @@ def _evict_done() -> None:
         _jobs.pop(done_ids.pop(0), None)
 
 
-def submit(key: str | None, fn) -> str:
-    """提交后台任务，返回 job_id；同 key 任务运行中时直接复用，避免重复跑 LLM。"""
+def submit(key: str | None, fn) -> tuple[str, bool]:
+    """提交后台任务；返回任务 ID 及本次是否真正创建了任务。"""
     with _lock:
         if key and key in _running_keys:
-            return _running_keys[key]
+            return _running_keys[key], False
         job = Job(id=uuid.uuid4().hex[:12])
         _jobs[job.id] = job
         if key:
@@ -54,7 +54,7 @@ def submit(key: str | None, fn) -> str:
                     _running_keys.pop(key, None)
 
     _pool.submit(_run)
-    return job.id
+    return job.id, True
 
 
 def get(job_id: str) -> Job | None:

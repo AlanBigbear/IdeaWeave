@@ -3,6 +3,7 @@ export interface User {
   username: string;
   active_persona_id: number | null;
   created_at: string;
+  is_trial: boolean;
 }
 
 export interface PersonaSkillBrief {

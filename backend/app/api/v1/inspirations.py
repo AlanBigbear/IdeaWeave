@@ -8,11 +8,12 @@ from app.models import User
 from app.schemas import ExtractInspirationIn, FetchPreviewIn, FetchPreviewOut, TopicOut
 from app.services import topic as topic_service
 from app.services.streaming import sse_token_stream
+from app.services.trial import trial_generation_slot
 
 router = APIRouter(prefix="/inspirations", tags=["inspirations"])
 
 
-@router.post("/extract", response_model=TopicOut)
+@router.post("/extract", response_model=TopicOut, dependencies=[Depends(trial_generation_slot)])
 def extract(
     payload: ExtractInspirationIn,
     user: User = Depends(get_current_user),
@@ -21,7 +22,7 @@ def extract(
     return topic_service.extract_and_save(db, user, payload)
 
 
-@router.post("/extract/stream")
+@router.post("/extract/stream", dependencies=[Depends(trial_generation_slot)])
 def extract_stream(
     payload: ExtractInspirationIn,
     user: User = Depends(get_current_user),
