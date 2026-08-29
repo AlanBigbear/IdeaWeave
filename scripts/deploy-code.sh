@@ -65,7 +65,7 @@ bootstrap_paths=(
   frontend/Dockerfile.production
   docker-compose.production.yml
 )
-bootstrap_backup="${deploy_path}-bootstrap-backup/${timestamp}"
+bootstrap_backup="${state_dir}/bootstrap-backup/${timestamp}"
 for path in "${bootstrap_paths[@]}"; do
   if [[ -e "$path" ]] && ! git ls-files --error-unmatch "$path" >/dev/null 2>&1 && git cat-file -e "${target_commit}:${path}" 2>/dev/null; then
     expected_file="$(mktemp)"

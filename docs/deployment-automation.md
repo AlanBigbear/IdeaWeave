@@ -49,6 +49,7 @@ ssh-keyscan -H 124.221.48.238
 - 能运行 `sudo docker` 与 `sudo docker compose`，且流水线执行时不会等待输入密码
 - 服务器已安装 Git、Docker Compose、curl、flock
 - `/opt/ideaweave/.env` 已存在，并继续由服务器人工维护，不放入 GitHub
+- 部署脚本接管服务器原有未跟踪生产文件时，会把同内容文件备份到 `/opt/ideaweave/.deploy-state/bootstrap-backup`，不要求部署用户拥有 `/opt` 根目录写权限
 
 ## 首次试运行
 
