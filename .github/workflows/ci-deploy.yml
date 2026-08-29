@@ -1,0 +1,185 @@
+name: 代码检查与生产部署
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ideaweave-production
+  cancel-in-progress: false
+
+jobs:
+  change-check:
+    name: 检查数据库相关变更
+    runs-on: ubuntu-24.04
+    outputs:
+      database_changed: ${{ steps.database.outputs.changed }}
+    steps:
+      - name: 检出代码
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: 计算比较范围
+        id: range
+        shell: bash
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          BEFORE_SHA: ${{ github.event.before }}
+          PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          CURRENT_SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          if [[ "$EVENT_NAME" == "pull_request" ]]; then
+            base="$PR_BASE_SHA"
+          elif [[ "$EVENT_NAME" == "push" && "$BEFORE_SHA" != "0000000000000000000000000000000000000000" ]]; then
+            base="$BEFORE_SHA"
+          else
+            base="$(git rev-parse "${CURRENT_SHA}^")"
+          fi
+          echo "base=$base" >> "$GITHUB_OUTPUT"
+
+      - name: 识别数据库相关文件
+        id: database
+        shell: bash
+        env:
+          BASE_SHA: ${{ steps.range.outputs.base }}
+          CURRENT_SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          chmod +x scripts/database-change-gate.sh
+          output="$(scripts/database-change-gate.sh "$BASE_SHA" "$CURRENT_SHA" --report-only)"
+          printf '%s\n' "$output"
+          if grep -q '^DATABASE_CHANGE_DETECTED=true$' <<< "$output"; then
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+            echo "### 检测到数据库相关变更" >> "$GITHUB_STEP_SUMMARY"
+            echo "线上使用 SQLite，而上游数据库交付为 MySQL，本次版本需要完整人工处理" >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+          fi
+
+  verify:
+    name: 测试与生产镜像构建
+    runs-on: ubuntu-24.04
+    steps:
+      - name: 检出代码
+        uses: actions/checkout@v4
+
+      - name: 配置 Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: backend/requirements.txt
+
+      - name: 后端测试
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r backend/requirements.txt pytest
+          cd backend
+          pytest -q
+
+      - name: 配置 Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: 前端构建检查
+        working-directory: frontend
+        run: |
+          npm ci
+          npm run build
+
+      - name: 构建后端生产镜像
+        run: docker build -f backend/Dockerfile.production backend
+
+      - name: 构建前端生产镜像
+        run: docker build -f frontend/Dockerfile.production frontend
+
+  database-change-blocked:
+    name: 阻止数据库变更自动部署
+    needs: [change-check, verify]
+    if: github.event_name != 'pull_request' && needs.change-check.outputs.database_changed == 'true'
+    runs-on: ubuntu-24.04
+    steps:
+      - name: 提示人工处理
+        run: |
+          echo "检测到数据库相关变更，未执行生产部署"
+          echo "线上使用 SQLite，而上游数据库交付为 MySQL，本次版本需要完整人工处理"
+          exit 1
+
+  deploy:
+    name: 部署生产环境
+    needs: [change-check, verify]
+    if: >-
+      needs.verify.result == 'success' &&
+      github.event_name != 'pull_request' &&
+      needs.change-check.outputs.database_changed == 'false'
+    runs-on: ubuntu-24.04
+    environment: production
+    steps:
+      - name: 检出代码
+        uses: actions/checkout@v4
+
+      - name: 校验部署配置
+        shell: bash
+        env:
+          DEPLOY_HOST: ${{ vars.DEPLOY_HOST }}
+          DEPLOY_USER: ${{ vars.DEPLOY_USER }}
+          DEPLOY_PORT: ${{ vars.DEPLOY_PORT }}
+          DEPLOY_PATH: ${{ vars.DEPLOY_PATH }}
+          DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+          DEPLOY_KNOWN_HOSTS: ${{ secrets.DEPLOY_KNOWN_HOSTS }}
+        run: |
+          set -euo pipefail
+          [[ -n "$DEPLOY_HOST" ]] || { echo "缺少变量 DEPLOY_HOST"; exit 1; }
+          [[ -n "$DEPLOY_USER" ]] || { echo "缺少变量 DEPLOY_USER"; exit 1; }
+          [[ -n "$DEPLOY_SSH_KEY" ]] || { echo "缺少密钥 DEPLOY_SSH_KEY"; exit 1; }
+          [[ -n "$DEPLOY_KNOWN_HOSTS" ]] || { echo "缺少密钥 DEPLOY_KNOWN_HOSTS"; exit 1; }
+          port="${DEPLOY_PORT:-22}"
+          path="${DEPLOY_PATH:-/opt/ideaweave}"
+          [[ "$port" =~ ^[0-9]+$ ]] || { echo "DEPLOY_PORT 必须是端口号"; exit 1; }
+          [[ "$path" =~ ^/[A-Za-z0-9._/-]+$ ]] || { echo "DEPLOY_PATH 必须是绝对路径"; exit 1; }
+
+      - name: 配置服务器连接
+        shell: bash
+        env:
+          DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+          DEPLOY_KNOWN_HOSTS: ${{ secrets.DEPLOY_KNOWN_HOSTS }}
+        run: |
+          set -euo pipefail
+          install -m 700 -d ~/.ssh
+          printf '%s\n' "$DEPLOY_SSH_KEY" > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+          printf '%s\n' "$DEPLOY_KNOWN_HOSTS" > ~/.ssh/known_hosts
+          chmod 600 ~/.ssh/known_hosts
+
+      - name: 执行代码部署
+        shell: bash
+        env:
+          DEPLOY_HOST: ${{ vars.DEPLOY_HOST }}
+          DEPLOY_USER: ${{ vars.DEPLOY_USER }}
+          DEPLOY_PORT: ${{ vars.DEPLOY_PORT }}
+          DEPLOY_PATH: ${{ vars.DEPLOY_PATH }}
+          TARGET_SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          port="${DEPLOY_PORT:-22}"
+          path="${DEPLOY_PATH:-/opt/ideaweave}"
+
+          remote_dir="/tmp/ideaweave-deploy-${TARGET_SHA}"
+          ssh -p "$port" "$DEPLOY_USER@$DEPLOY_HOST" "mkdir -p '$remote_dir'"
+          scp -P "$port" scripts/deploy-code.sh scripts/database-change-gate.sh \
+            "$DEPLOY_USER@$DEPLOY_HOST:$remote_dir/"
+
+          remote_command="$(printf 'chmod 700 %q/*.sh && DEPLOY_PATH=%q bash %q/deploy-code.sh %q; result=$?; rm -rf %q; exit $result' \
+            "$remote_dir" "$path" "$remote_dir" "$TARGET_SHA" "$remote_dir")"
+          ssh -p "$port" "$DEPLOY_USER@$DEPLOY_HOST" "$remote_command"
