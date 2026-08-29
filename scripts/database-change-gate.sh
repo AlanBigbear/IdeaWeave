@@ -2,7 +2,7 @@
 set -euo pipefail
 
 usage() {
-  echo "用法: $0 <基准提交> <目标提交> [--allow]" >&2
+  echo "用法: $0 <基准提交> <目标提交> [--report-only]" >&2
 }
 
 if [[ $# -lt 2 || $# -gt 3 ]]; then
@@ -12,10 +12,10 @@ fi
 
 base_commit="$1"
 target_commit="$2"
-allow_database_changes="false"
+report_only="false"
 
-if [[ ${3:-} == "--allow" ]]; then
-  allow_database_changes="true"
+if [[ ${3:-} == "--report-only" ]]; then
+  report_only="true"
 elif [[ $# -eq 3 ]]; then
   usage
   exit 64
@@ -50,10 +50,10 @@ echo "DATABASE_CHANGE_DETECTED=true"
 echo "检测到需要人工处理的数据库相关变更:"
 printf '  - %s\n' "${database_paths[@]}"
 
-if [[ "$allow_database_changes" == "true" ]]; then
-  echo "已收到人工放行，仅继续部署代码；脚本不会执行任何 SQL 或数据迁移"
+if [[ "$report_only" == "true" ]]; then
+  echo "仅报告数据库相关变更，不执行部署"
   exit 0
 fi
 
-echo "自动部署已停止。请先人工完成数据库处理，再从 GitHub 手动运行流水线并勾选数据库已处理" >&2
+echo "自动部署已停止。线上使用 SQLite，而上游数据库交付为 MySQL，需要转为完整人工处理" >&2
 exit 42

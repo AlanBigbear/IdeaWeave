@@ -2,7 +2,6 @@
 set -Eeuo pipefail
 
 target_commit="${1:-}"
-allow_database_changes="${2:-false}"
 deploy_path="${DEPLOY_PATH:-/opt/ideaweave}"
 project_name="${COMPOSE_PROJECT_NAME:-ideaweave}"
 script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -24,11 +23,11 @@ fail() {
   exit 1
 }
 
+if [[ $# -ne 1 ]]; then
+  fail "用法: $0 <目标提交>"
+fi
 if [[ ! "$target_commit" =~ ^[0-9a-f]{40}$ ]]; then
   fail "目标提交必须是完整的 40 位 Git 提交哈希"
-fi
-if [[ "$allow_database_changes" != "true" && "$allow_database_changes" != "false" ]]; then
-  fail "数据库放行参数只能是 true 或 false"
 fi
 [[ -x "$gate_script" ]] || fail "缺少数据库变更检查脚本: ${gate_script}"
 [[ -d "$deploy_path/.git" ]] || fail "部署目录不是 Git 仓库: ${deploy_path}"
@@ -59,11 +58,7 @@ git cat-file -e "${target_commit}^{commit}" 2>/dev/null || fail "远端不存在
 git merge-base --is-ancestor "$target_commit" origin/main || fail "目标提交不属于当前 origin/main"
 git merge-base --is-ancestor "$previous_code_commit" "$target_commit" || fail "目标提交无法从当前代码快进更新"
 
-gate_args=("$runtime_commit" "$target_commit")
-if [[ "$allow_database_changes" == "true" ]]; then
-  gate_args+=(--allow)
-fi
-"$gate_script" "${gate_args[@]}"
+"$gate_script" "$runtime_commit" "$target_commit"
 
 bootstrap_paths=(
   backend/Dockerfile.production

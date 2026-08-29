@@ -6,12 +6,6 @@ on:
   push:
     branches: [main]
   workflow_dispatch:
-    inputs:
-      database_change_handled:
-        description: 已人工完成本次数据库变更，并允许继续部署代码
-        required: true
-        default: false
-        type: boolean
 
 permissions:
   contents: read
@@ -60,12 +54,12 @@ jobs:
         run: |
           set -euo pipefail
           chmod +x scripts/database-change-gate.sh
-          output="$(scripts/database-change-gate.sh "$BASE_SHA" "$CURRENT_SHA" --allow)"
+          output="$(scripts/database-change-gate.sh "$BASE_SHA" "$CURRENT_SHA" --report-only)"
           printf '%s\n' "$output"
           if grep -q '^DATABASE_CHANGE_DETECTED=true$' <<< "$output"; then
             echo "changed=true" >> "$GITHUB_OUTPUT"
             echo "### 检测到数据库相关变更" >> "$GITHUB_STEP_SUMMARY"
-            echo "自动部署将等待人工处理数据库后手动放行" >> "$GITHUB_STEP_SUMMARY"
+            echo "线上使用 SQLite，而上游数据库交付为 MySQL，本次版本需要完整人工处理" >> "$GITHUB_STEP_SUMMARY"
           else
             echo "changed=false" >> "$GITHUB_OUTPUT"
           fi
@@ -113,13 +107,13 @@ jobs:
   database-change-blocked:
     name: 阻止数据库变更自动部署
     needs: [change-check, verify]
-    if: github.event_name == 'push' && needs.change-check.outputs.database_changed == 'true'
+    if: github.event_name != 'pull_request' && needs.change-check.outputs.database_changed == 'true'
     runs-on: ubuntu-24.04
     steps:
       - name: 提示人工处理
         run: |
           echo "检测到数据库相关变更，未执行生产部署"
-          echo "请先人工处理数据库，再手动运行本流水线并勾选数据库已处理"
+          echo "线上使用 SQLite，而上游数据库交付为 MySQL，本次版本需要完整人工处理"
           exit 1
 
   deploy:
@@ -127,8 +121,8 @@ jobs:
     needs: [change-check, verify]
     if: >-
       needs.verify.result == 'success' &&
-      ((github.event_name == 'push' && needs.change-check.outputs.database_changed == 'false') ||
-       github.event_name == 'workflow_dispatch')
+      github.event_name != 'pull_request' &&
+      needs.change-check.outputs.database_changed == 'false'
     runs-on: ubuntu-24.04
     environment: production
     steps:
@@ -175,22 +169,17 @@ jobs:
           DEPLOY_USER: ${{ vars.DEPLOY_USER }}
           DEPLOY_PORT: ${{ vars.DEPLOY_PORT }}
           DEPLOY_PATH: ${{ vars.DEPLOY_PATH }}
-          DATABASE_CHANGE_HANDLED: ${{ inputs.database_change_handled }}
           TARGET_SHA: ${{ github.sha }}
         run: |
           set -euo pipefail
           port="${DEPLOY_PORT:-22}"
           path="${DEPLOY_PATH:-/opt/ideaweave}"
-          allow_database_changes="false"
-          if [[ "${DATABASE_CHANGE_HANDLED:-false}" == "true" ]]; then
-            allow_database_changes="true"
-          fi
 
           remote_dir="/tmp/ideaweave-deploy-${TARGET_SHA}"
           ssh -p "$port" "$DEPLOY_USER@$DEPLOY_HOST" "mkdir -p '$remote_dir'"
           scp -P "$port" scripts/deploy-code.sh scripts/database-change-gate.sh \
             "$DEPLOY_USER@$DEPLOY_HOST:$remote_dir/"
 
-          remote_command="$(printf 'chmod 700 %q/*.sh && DEPLOY_PATH=%q bash %q/deploy-code.sh %q %q; result=$?; rm -rf %q; exit $result' \
-            "$remote_dir" "$path" "$remote_dir" "$TARGET_SHA" "$allow_database_changes" "$remote_dir")"
+          remote_command="$(printf 'chmod 700 %q/*.sh && DEPLOY_PATH=%q bash %q/deploy-code.sh %q; result=$?; rm -rf %q; exit $result' \
+            "$remote_dir" "$path" "$remote_dir" "$TARGET_SHA" "$remote_dir")"
           ssh -p "$port" "$DEPLOY_USER@$DEPLOY_HOST" "$remote_command"
