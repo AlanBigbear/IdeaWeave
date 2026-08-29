@@ -54,6 +54,8 @@ jobs:
         run: |
           set -euo pipefail
           chmod +x scripts/database-change-gate.sh
+          chmod +x scripts/test-database-change-gate.sh
+          scripts/test-database-change-gate.sh
           output="$(scripts/database-change-gate.sh "$BASE_SHA" "$CURRENT_SHA" --report-only)"
           printf '%s\n' "$output"
           if grep -q '^DATABASE_CHANGE_DETECTED=true$' <<< "$output"; then

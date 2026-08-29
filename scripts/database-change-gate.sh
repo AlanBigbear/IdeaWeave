@@ -30,15 +30,39 @@ git cat-file -e "${target_commit}^{commit}" 2>/dev/null || {
   exit 65
 }
 
+changed_lines_match() {
+  local path="$1"
+  local pattern="$2"
+
+  git diff --unified=0 --no-ext-diff --no-color --no-renames \
+    "${base_commit}..${target_commit}" -- "$path" \
+    | sed -n '/^[+-]/p' \
+    | sed '/^+++ /d; /^--- /d' \
+    | grep -Eiq -- "$pattern"
+}
+
+config_database_pattern='(^|[^[:alnum:]_])(database_url|mysql_connect_timeout|mysql_fallback_sqlite|data_dir|db_path|sqlalchemy_url)([^[:alnum:]_]|$)'
+compose_database_pattern='(^|[^[:alnum:]_])(database_url|mysql_[[:alnum:]_]*|data_dir|backend_data|db)([^[:alnum:]_]|$)|mysql(\+|:|/)|/var/lib/mysql'
+
 database_paths=()
 while IFS= read -r path; do
   [[ -n "$path" ]] || continue
   case "$path" in
-    *.sql|deploy/*|backend/app/models/*|backend/app/core/database.py|backend/app/core/config.py|backend/app/main.py|backend/app/services/trial.py|backend/scripts/*|backend/data/*|docker-compose.yml|docker-compose.prod.yml|Dockerfile.prod)
+    backend/app/core/config.py)
+      if changed_lines_match "$path" "$config_database_pattern"; then
+        database_paths+=("$path")
+      fi
+      ;;
+    docker-compose.prod.yml)
+      if changed_lines_match "$path" "$compose_database_pattern"; then
+        database_paths+=("$path")
+      fi
+      ;;
+    *.sql|deploy/*|backend/app/models/*|backend/app/core/database.py|backend/app/main.py|backend/app/services/trial.py|backend/scripts/*|backend/data/*|docker-compose.yml|Dockerfile.prod)
       database_paths+=("$path")
       ;;
   esac
-done < <(git diff --name-only "${base_commit}..${target_commit}")
+done < <(git diff --name-only --no-renames "${base_commit}..${target_commit}")
 
 if [[ ${#database_paths[@]} -eq 0 ]]; then
   echo "DATABASE_CHANGE_DETECTED=false"
