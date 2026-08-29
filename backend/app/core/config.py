@@ -25,7 +25,7 @@ class Settings(BaseSettings):
     trial_username: str = "demo"
     trial_anime_username: str = "demo-anime"
     trial_pet_username: str = "demo-pet"
-    trial_reset_minutes: int = 60
+    trial_reset_minutes: int = 10
     trial_jwt_expire_minutes: int = 120
     trial_login_requests_per_minute: int = 20
     trial_generation_requests_per_window: int = 5
